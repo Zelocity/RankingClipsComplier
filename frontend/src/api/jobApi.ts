@@ -18,3 +18,15 @@ export async function createJob(): Promise<CreateJobResponse> {
 
   return data;
 }
+
+export async function deleteJob(jobId: string): Promise<void> {
+  const response = await fetch(`${API_URL}/jobs/${jobId}`, {
+    method: "DELETE",
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.message || "Failed to delete job.");
+  }
+}

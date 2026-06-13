@@ -182,3 +182,89 @@
     border-right-color: var(--border);
   }
 }
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: #111827;
+  color: white;
+  font-family: Arial, sans-serif;
+}
+
+.page {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 40px 20px;
+}
+
+.panel {
+  background: #1f2937;
+  border: 1px solid #374151;
+  border-radius: 16px;
+  padding: 24px;
+}
+
+button {
+  background: white;
+  color: #111827;
+  border: none;
+  border-radius: 10px;
+  padding: 12px 18px;
+  font-size: 16px;
+  cursor: pointer;
+  margin-top: 12px;
+  margin-right: 10px;
+}
+
+button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+input {
+  width: 100%;
+  padding: 12px;
+  border-radius: 10px;
+  border: 1px solid #4b5563;
+  background: #111827;
+  color: white;
+  font-size: 16px;
+  margin-top: 8px;
+}
+
+a {
+  color: #93c5fd;
+}
+
+.status {
+  margin-top: 20px;
+  padding: 14px;
+  background: #111827;
+  border-radius: 10px;
+}
+
+.top-row {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.job-box {
+  margin-top: 20px;
+  padding: 14px;
+  background: #111827;
+  border-radius: 10px;
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.editor-section {
+  margin-top: 28px;
+  padding-top: 20px;
+  border-top: 1px solid #374151;
+}
