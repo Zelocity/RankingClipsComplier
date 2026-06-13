@@ -36,8 +36,8 @@ def remove_folder(folder_path: str) -> None:
 
 def remove_project() -> None:
     folders_to_clean = [
-        "input",
-        "output"
+        "../storage/input",
+        "../storage/output"
     ]
 
     confirm = input("This will delete files in input/ and output/. Continue? (y/n): ").strip().lower()
