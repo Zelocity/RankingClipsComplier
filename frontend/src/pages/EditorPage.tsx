@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { deleteJob } from "../api/jobApi";
 import { importClipFromUrl, type Clip } from "../api/clipApi";
@@ -19,6 +19,8 @@ function EditorPage() {
   const [status, setStatus] = useState<string>("Editor ready.");
   const [isImporting, setIsImporting] = useState<boolean>(false);
   const [isLeaving, setIsLeaving] = useState<boolean>(false);
+
+  const videoRefs = useRef<Record<string, HTMLVideoElement | null>>({});
 
   async function handleImportClip() {
     if (!jobId) {
@@ -115,10 +117,54 @@ function EditorPage() {
     );
   }
 
+  function previewClipTime(clipId: string, time: number) {
+    const video = videoRefs.current[clipId];
+
+    if (!video) return;
+
+    video.currentTime = time;
+    video.pause();
+  }
+
+  function handlePreviewPlay(clip: EditorClip) {
+    const video = videoRefs.current[clip.id];
+
+    if (!video) return;
+
+    if (
+      video.currentTime < clip.startTime ||
+      video.currentTime >= clip.endTime
+    ) {
+      video.currentTime = clip.startTime;
+    }
+  }
+
+  function handlePreviewTimeUpdate(clip: EditorClip) {
+    const video = videoRefs.current[clip.id];
+
+    if (!video) return;
+
+    if (video.currentTime >= clip.endTime) {
+      video.pause();
+      video.currentTime = clip.startTime;
+    }
+  }
+
+  function playPreviewSegment(clip: EditorClip) {
+    const video = videoRefs.current[clip.id];
+
+    if (!video) return;
+
+    video.currentTime = clip.startTime;
+    video.play();
+  }
+
   function removeClip(clipId: string) {
     setClips((previousClips) =>
       previousClips.filter((clip) => clip.id !== clipId)
     );
+
+    delete videoRefs.current[clipId];
   }
 
   async function handleLeaveEditor() {
@@ -201,6 +247,9 @@ function EditorPage() {
                   </div>
 
                   <video
+                    ref={(element) => {
+                      videoRefs.current[clip.id] = element;
+                    }}
                     src={clip.videoUrl}
                     controls
                     onLoadedMetadata={(event) => {
@@ -209,6 +258,8 @@ function EditorPage() {
                         event.currentTarget.duration
                       );
                     }}
+                    onPlay={() => handlePreviewPlay(clip)}
+                    onTimeUpdate={() => handlePreviewTimeUpdate(clip)}
                   />
 
                   <p className="clip-file-name">{clip.fileName}</p>
@@ -217,13 +268,19 @@ function EditorPage() {
                     duration={clip.duration}
                     startTime={clip.startTime}
                     endTime={clip.endTime}
-                    onChangeStart={(value) =>
-                      updateClipTime(clip.id, "startTime", value)
-                    }
-                    onChangeEnd={(value) =>
-                      updateClipTime(clip.id, "endTime", value)
-                    }
+                    onChangeStart={(value) => {
+                      updateClipTime(clip.id, "startTime", value);
+                      previewClipTime(clip.id, value);
+                    }}
+                    onChangeEnd={(value) => {
+                      updateClipTime(clip.id, "endTime", value);
+                      previewClipTime(clip.id, value);
+                    }}
                   />
+
+                  <button onClick={() => playPreviewSegment(clip)}>
+                    Preview Segment
+                  </button>
                 </div>
               ))}
             </div>
