@@ -4,7 +4,7 @@ import { spawn } from "child_process";
 
 const router = express.Router();
 
-router.post("/", (req, res) => {
+router.get("/", (req, res) => {
     res.json({ message: "Compile route hit." });
 //   const projectRoot = path.resolve(process.cwd(), "..");
 
