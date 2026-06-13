@@ -1,0 +1,7 @@
+# video files
+*.mp4
+*.mov
+*.mkv
+*.webm
+
+/__pycache__
