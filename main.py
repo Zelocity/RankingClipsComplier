@@ -1,6 +1,6 @@
 
 from downloader import download_video
-from cleanup import cleanup_project
+from remover import remove_project
 
 
 def main():
@@ -14,7 +14,7 @@ def main():
     userInput = input("Clean up project? (y): ")
 
     if userInput == "y":
-        cleanup_project()
+        remove_project()
         print(f"Project is cleaned")
     else: 
         print(f"Project is not cleaned up")

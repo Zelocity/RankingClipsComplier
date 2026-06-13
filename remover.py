@@ -1,8 +1,22 @@
 from pathlib import Path
 import shutil
 
+def remove_video(video_path: str) -> None:
+    video = Path(video_path)
 
-def clean_folder(folder_path: str) -> None:
+    if not video.exists():
+        print(f"Video does not exist: {video}")
+        return
+
+    if not video.is_file():
+        print(f"This is not a file: {video}")
+        return
+
+    video.unlink()
+    print(f"Deleted video: {video}")
+
+
+def remove_folder(folder_path: str) -> None:
     folder = Path(folder_path)
 
     if not folder.exists():
@@ -15,14 +29,12 @@ def clean_folder(folder_path: str) -> None:
 
     for item in folder.iterdir():
         if item.is_file():
-            item.unlink()
-            print(f"Deleted file: {item}")
+            remove_video(str(item))
         elif item.is_dir():
             shutil.rmtree(item)
             print(f"Deleted folder: {item}")
 
-
-def cleanup_project() -> None:
+def remove_project() -> None:
     folders_to_clean = [
         "input",
         "output"
@@ -35,6 +47,6 @@ def cleanup_project() -> None:
         return
 
     for folder in folders_to_clean:
-        clean_folder(folder)
+        remove_folder(folder)
 
     print("Cleanup complete.")
