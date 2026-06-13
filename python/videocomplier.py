@@ -45,7 +45,7 @@ def compile_videos(input_dir: str, output_dir: str) -> None:
 
         clip = VideoFileClip(str(video_file))
 
-        # Optional: limit each video to first 8 seconds
+        # Optional: use only first 8 seconds
         clip = clip.subclipped(0, min(8, clip.duration))
 
         clip = format_vertical(clip)
@@ -70,11 +70,12 @@ def compile_videos(input_dir: str, output_dir: str) -> None:
     print(f"Done. Final video saved to: {final_output}")
 
 
-# if __name__ == "__main__":
-#     parser = argparse.ArgumentParser()
-#     parser.add_argument("--input", required=True)
-#     parser.add_argument("--output", required=True)
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
 
-#     args = parser.parse_args()
+    parser.add_argument("--input", required=True)
+    parser.add_argument("--output", required=True)
 
-#     compile_videos(args.input, args.output)
+    args = parser.parse_args()
+
+    compile_videos(args.input, args.output)
