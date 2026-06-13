@@ -2,6 +2,10 @@ import subprocess
 from pathlib import Path
 
 def download_video(url: str, output_dir: str = "input") -> None:
+
+    if not url:
+        return
+
     input_dir = Path(output_dir)
     input_dir.mkdir(exist_ok=True)
 
