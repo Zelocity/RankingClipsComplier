@@ -1,7 +1,7 @@
-from downloader import download_video
-from remover import remove_project
-from videocomplier import compile_videos
-from job import createJob, removeJob
+from RankingVideo.downloader import download_video
+from RankingVideo.remover import remove_project
+from RankingVideo.videocomplier import compile_videos
+from RankingVideo.job import createJob, removeJob
 
 def main():
     
