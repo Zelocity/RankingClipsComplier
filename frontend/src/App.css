@@ -268,3 +268,28 @@ a {
   padding-top: 20px;
   border-top: 1px solid #374151;
 }
+
+.clip-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.clip-card {
+  background: #111827;
+  border: 1px solid #374151;
+  border-radius: 12px;
+  padding: 14px;
+}
+
+.clip-card video {
+  width: 100%;
+  border-radius: 10px;
+  background: black;
+}
+
+.clip-card p {
+  color: #cbd5e1;
+  word-break: break-all;
+}

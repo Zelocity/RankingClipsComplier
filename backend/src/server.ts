@@ -3,6 +3,7 @@ import cors from "cors";
 
 import compileRoutes from "./routes/compileRoutes";
 import jobRoutes from "./routes/jobRoutes";
+import clipRoutes from "./routes/clipRoutes";
 
 const app = express();
 const PORT = 8000;
@@ -19,6 +20,7 @@ app.get("/", (req, res) => {
 // Routes
 app.use("/compile", compileRoutes);
 app.use("/jobs", jobRoutes);
+app.use("/jobs", clipRoutes);
 
 // Start server
 app.listen(PORT, () => {

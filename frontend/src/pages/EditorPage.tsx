@@ -1,13 +1,48 @@
 import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { deleteJob } from "../api/jobApi";
+import { importClipFromUrl, type Clip } from "../api/clipApi";
 
 function EditorPage() {
   const { jobId } = useParams();
   const navigate = useNavigate();
 
+  const [url, setUrl] = useState<string>("");
+  const [clips, setClips] = useState<Clip[]>([]);
   const [status, setStatus] = useState<string>("Editor ready.");
+  const [isImporting, setIsImporting] = useState<boolean>(false);
   const [isLeaving, setIsLeaving] = useState<boolean>(false);
+
+  async function handleImportClip() {
+    if (!jobId) {
+      setStatus("Missing job ID.");
+      return;
+    }
+
+    if (!url.trim()) {
+      setStatus("Please enter a URL.");
+      return;
+    }
+
+    try {
+      setIsImporting(true);
+      setStatus("Importing clip...");
+
+      const result = await importClipFromUrl(jobId, url.trim());
+
+      setClips((previousClips) => [...previousClips, result.clip]);
+      setUrl("");
+      setStatus(result.message);
+    } catch (error) {
+      if (error instanceof Error) {
+        setStatus(`Error: ${error.message}`);
+      } else {
+        setStatus("Unknown error importing clip.");
+      }
+    } finally {
+      setIsImporting(false);
+    }
+  }
 
   async function handleLeaveEditor() {
     if (!jobId) {
@@ -57,19 +92,38 @@ function EditorPage() {
         </p>
 
         <section className="editor-section">
-          <h2>Import Video</h2>
+          <h2>Import Video URL</h2>
 
           <input
             type="text"
-            placeholder="Paste TikTok, YouTube Shorts, or Instagram Reel URL"
+            value={url}
+            placeholder="Paste TikTok, YouTube Shorts, Instagram Reel, or other supported URL"
+            onChange={(event) => setUrl(event.target.value)}
           />
 
-          <button>Import URL</button>
+          <button onClick={handleImportClip} disabled={isImporting}>
+            {isImporting ? "Importing..." : "Add Clip"}
+          </button>
         </section>
 
         <section className="editor-section">
           <h2>Clips</h2>
-          <p>No clips added yet.</p>
+
+          {clips.length === 0 ? (
+            <p>No clips added yet.</p>
+          ) : (
+            <div className="clip-list">
+              {clips.map((clip, index) => (
+                <div className="clip-card" key={clip.id}>
+                  <h3>Clip {index + 1}</h3>
+
+                  <video src={clip.videoUrl} controls width="320" />
+
+                  <p>{clip.fileName}</p>
+                </div>
+              ))}
+            </div>
+          )}
         </section>
 
         <section className="editor-section">
