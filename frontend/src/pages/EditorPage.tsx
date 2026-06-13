@@ -2,13 +2,20 @@ import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { deleteJob } from "../api/jobApi";
 import { importClipFromUrl, type Clip } from "../api/clipApi";
+import TrimSlider from "../components/TrimSlider";
+
+type EditorClip = Clip & {
+  duration: number;
+  startTime: number;
+  endTime: number;
+};
 
 function EditorPage() {
   const { jobId } = useParams();
   const navigate = useNavigate();
 
   const [url, setUrl] = useState<string>("");
-  const [clips, setClips] = useState<Clip[]>([]);
+  const [clips, setClips] = useState<EditorClip[]>([]);
   const [status, setStatus] = useState<string>("Editor ready.");
   const [isImporting, setIsImporting] = useState<boolean>(false);
   const [isLeaving, setIsLeaving] = useState<boolean>(false);
@@ -30,7 +37,14 @@ function EditorPage() {
 
       const result = await importClipFromUrl(jobId, url.trim());
 
-      setClips((previousClips) => [...previousClips, result.clip]);
+      const newClip: EditorClip = {
+        ...result.clip,
+        duration: 0,
+        startTime: 0,
+        endTime: 8,
+      };
+
+      setClips((previousClips) => [...previousClips, newClip]);
       setUrl("");
       setStatus(result.message);
     } catch (error) {
@@ -42,6 +56,69 @@ function EditorPage() {
     } finally {
       setIsImporting(false);
     }
+  }
+
+  function updateClipDuration(clipId: string, duration: number) {
+    setClips((previousClips) =>
+      previousClips.map((clip) => {
+        if (clip.id !== clipId) return clip;
+
+        return {
+          ...clip,
+          duration,
+          endTime: Math.min(clip.endTime, duration),
+        };
+      })
+    );
+  }
+
+  function updateClipTime(
+    clipId: string,
+    field: "startTime" | "endTime",
+    value: number
+  ) {
+    const MIN_CLIP_LENGTH = 0.5;
+
+    setClips((previousClips) =>
+      previousClips.map((clip) => {
+        if (clip.id !== clipId) return clip;
+
+        let newStartTime = clip.startTime;
+        let newEndTime = clip.endTime;
+
+        if (field === "startTime") {
+          newStartTime = value;
+
+          if (newStartTime >= newEndTime) {
+            newStartTime = Math.max(0, newEndTime - MIN_CLIP_LENGTH);
+          }
+        }
+
+        if (field === "endTime") {
+          newEndTime = value;
+
+          if (newEndTime <= newStartTime) {
+            newEndTime = newStartTime + MIN_CLIP_LENGTH;
+          }
+
+          if (clip.duration > 0) {
+            newEndTime = Math.min(newEndTime, clip.duration);
+          }
+        }
+
+        return {
+          ...clip,
+          startTime: newStartTime,
+          endTime: newEndTime,
+        };
+      })
+    );
+  }
+
+  function removeClip(clipId: string) {
+    setClips((previousClips) =>
+      previousClips.filter((clip) => clip.id !== clipId)
+    );
   }
 
   async function handleLeaveEditor() {
@@ -74,7 +151,7 @@ function EditorPage() {
         <div className="top-row">
           <div>
             <h1>Project Editor</h1>
-            <p>Add clips, arrange rankings, compile, and download your video.</p>
+            <p>Add clips, choose start/end points, compile, and download.</p>
           </div>
 
           <button onClick={handleLeaveEditor} disabled={isLeaving}>
@@ -115,11 +192,38 @@ function EditorPage() {
             <div className="clip-list">
               {clips.map((clip, index) => (
                 <div className="clip-card" key={clip.id}>
-                  <h3>Clip {index + 1}</h3>
+                  <div className="clip-card-header">
+                    <h3>Clip {index + 1}</h3>
 
-                  <video src={clip.videoUrl} controls width="320" />
+                    <button onClick={() => removeClip(clip.id)}>
+                      Remove
+                    </button>
+                  </div>
 
-                  <p>{clip.fileName}</p>
+                  <video
+                    src={clip.videoUrl}
+                    controls
+                    onLoadedMetadata={(event) => {
+                      updateClipDuration(
+                        clip.id,
+                        event.currentTarget.duration
+                      );
+                    }}
+                  />
+
+                  <p className="clip-file-name">{clip.fileName}</p>
+
+                  <TrimSlider
+                    duration={clip.duration}
+                    startTime={clip.startTime}
+                    endTime={clip.endTime}
+                    onChangeStart={(value) =>
+                      updateClipTime(clip.id, "startTime", value)
+                    }
+                    onChangeEnd={(value) =>
+                      updateClipTime(clip.id, "endTime", value)
+                    }
+                  />
                 </div>
               ))}
             </div>
