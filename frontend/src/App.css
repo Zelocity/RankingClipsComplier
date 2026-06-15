@@ -1,4 +1,4 @@
-.counter {
+/* .counter {
   font-size: 16px;
   padding: 5px 10px;
   border-radius: 5px;
@@ -471,4 +471,83 @@ a {
   color: #cbd5e1;
   font-size: 14px;
   margin-top: 8px;
+} */
+
+* {
+  box-sizing: border-box;
+}
+
+.container {
+  max-width: 500px;
+  width: 100%;
+  margin: 40px auto;
+}
+
+.items {
+  display: grid;
+  gap: 12px;
+}
+
+.slot {
+  min-height: 80px;
+  padding: 12px;
+  border: 2px dashed #4b5563;
+  border-radius: 12px;
+  overflow: visible;
+}
+
+.item {
+  width: 100%;
+  min-height: 56px;
+  background: #1f2937;
+  color: white;
+  padding: 18px;
+  border-radius: 10px;
+
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+
+  cursor: grab;
+  border: none;
+  font: inherit;
+}
+
+.item:active {
+  cursor: grabbing;
+}
+
+.item:focus {
+  outline: none;
+}
+
+.item:focus-visible {
+  outline: 2px solid #93c5fd;
+  outline-offset: 2px;
+}
+
+.item--add {
+  margin-top: 16px;
+  justify-content: center;
+  font-size: 24px;
+  cursor: pointer;
+}
+
+.delete {
+  background: #ef4444;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 10px;
+  cursor: pointer;
+  font: inherit;
+}
+
+.delete:focus {
+  outline: none;
+}
+
+.delete:focus-visible {
+  outline: 2px solid #93c5fd;
+  outline-offset: 2px;
 }
