@@ -5,9 +5,9 @@ import DraggableItemList, {
 import { createNewItem } from "../utils/listUtils";
 
 const initialItems: Item[] = [
-  { id: "1", title: "1" },
-  { id: "2", title: "2" },
-  { id: "3", title: "3" },
+  { id: "1", title: "1", url: "https://www.youtube.com/shorts/02Q-tlITPM0" },
+  { id: "2", title: "2", url: "https://www.youtube.com/shorts/NcrWp5et0cs" },
+  { id: "3", title: "3", url: "https://www.youtube.com/shorts/Z3HeIJDqxcc" },
 ];
 
 let nextId = 4;

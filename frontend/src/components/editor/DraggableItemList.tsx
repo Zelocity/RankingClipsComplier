@@ -5,6 +5,7 @@ import type { SlotItemMapArray, Swapy } from "swapy";
 export type Item = {
   id: string;
   title: string;
+  url: string;
 };
 
 type DraggableItemListProps = {
