@@ -1,11 +1,11 @@
 const API_URL = "http://localhost:8000";
 
-export type CreateJobResponse = {
+export type jobResponse = {
   message: string;
   jobId: string;
 };
 
-export async function createJob(): Promise<CreateJobResponse> {
+export async function createJob(): Promise<jobResponse> {
   const response = await fetch(`${API_URL}/jobs`, {
     method: "POST",
   });
@@ -19,7 +19,7 @@ export async function createJob(): Promise<CreateJobResponse> {
   return data;
 }
 
-export async function deleteJob(jobId: string): Promise<void> {
+export async function deleteJob(jobId: string): Promise<jobResponse> {
   const response = await fetch(`${API_URL}/jobs/${jobId}`, {
     method: "DELETE",
   });
@@ -29,4 +29,6 @@ export async function deleteJob(jobId: string): Promise<void> {
   if (!response.ok) {
     throw new Error(data.message || "Failed to delete job.");
   }
+  data.message = `Successfully deleted job: ${jobId}`;
+  return data;
 }
