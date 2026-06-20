@@ -17,11 +17,9 @@ describe("importClipFromUrl()", () => {
       ok: true,
       json: async () => ({
         message: "Clip imported successfully.",
-        clip: {
-          id: "abc123",
-          fileName: "abc123.mp4",
-          videoUrl: "http://localhost:8000/jobs/job1/clips/abc123.mp4",
-        },
+        id: "abc123",
+        fileName: "abc123.mp4",
+        videoUrl: "http://localhost:8000/jobs/job1/clips/abc123.mp4",
       }),
     }) as unknown as typeof fetch;
 
@@ -32,9 +30,9 @@ describe("importClipFromUrl()", () => {
 
     console.log("clip:", clip);
 
-    expect(clip.clip.id).toBe("abc123");
-    expect(clip.clip.fileName).toBe("abc123.mp4");
-    expect(clip.clip.videoUrl).toContain("abc123.mp4");
+    expect(clip.id).toBe("abc123");
+    expect(clip.fileName).toBe("abc123.mp4");
+    expect(clip.videoUrl).toContain("abc123.mp4");
   });
 
   //   it("should correctly deduct a percentage from the price", () => {

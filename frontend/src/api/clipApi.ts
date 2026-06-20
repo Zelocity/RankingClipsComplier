@@ -1,19 +1,15 @@
 const API_URL = "http://localhost:8000";
 
-export type Clip = {
+export type ImportClipResponse = {
+  message: string;
   id: string;
   fileName: string;
   videoUrl: string;
 };
 
-export type ImportClipResponse = {
-  message: string;
-  clip: Clip;
-};
-
 export async function importClipFromUrl(
   jobId: string,
-  url: string
+  url: string,
 ): Promise<ImportClipResponse> {
   const response = await fetch(`${API_URL}/jobs/${jobId}/import-url`, {
     method: "POST",
