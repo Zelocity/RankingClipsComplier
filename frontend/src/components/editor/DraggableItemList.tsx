@@ -61,6 +61,10 @@ function DraggableItemList({ items, onDeleteItem }: DraggableItemListProps) {
             <div className="item" key={itemId} data-swapy-item={itemId}>
               <span>{item.title}</span>
 
+              <video className="video-preview" controls>
+                {/* <source src={clip.videoUrl} type="video/mp4" /> */}
+              </video>
+
               <button
                 className="delete"
                 data-swapy-no-drag

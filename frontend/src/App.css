@@ -551,3 +551,9 @@ a {
   outline: 2px solid #93c5fd;
   outline-offset: 2px;
 }
+
+.video-preview {
+  width: 270px;
+  height: 480px;
+  object-fit: contain;
+}
