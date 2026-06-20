@@ -2,6 +2,7 @@ import { useState } from "react";
 import DraggableItemList, {
   type Item,
 } from "../components/editor/DraggableItemList.tsx";
+import { createNewItem } from "../utils/listUtils";
 
 const initialItems: Item[] = [
   { id: "1", title: "1" },
@@ -15,10 +16,7 @@ function EditorPage() {
   const [items, setItems] = useState<Item[]>(initialItems);
 
   function handleAddItem() {
-    const newItem: Item = {
-      id: `${nextId}`,
-      title: `${nextId}`,
-    };
+    const newItem = createNewItem(nextId);
 
     setItems((previousItems) => [...previousItems, newItem]);
     nextId++;
