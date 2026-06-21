@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { importClipFromUrl } from "../api/clipApi";
 
 export type Item = {
   slotId: string;
@@ -38,7 +39,13 @@ export function useItemList() {
   // Keeps the next ID after React re-renders the page.
   const nextIdRef = useRef(4);
 
-  function handleAddItem() {
+  async function handleAddItem(jobId: string, urlId: string) {
+    const result = await importClipFromUrl(jobId, urlId);
+
+    if (!result) {
+      console.log("[handleAddItem] No results from jobId or urlId");
+    }
+    console.log("[handleAddItem]", result);
     const newItem = createNewItem(nextIdRef.current);
 
     setItems((previousItems) => [...previousItems, newItem]);

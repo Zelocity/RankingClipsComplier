@@ -3,18 +3,17 @@ import { useState } from "react";
 import type { Item } from "../../utils/listUtils";
 
 type ItemListProps = {
+  jobId: string;
   items: Item[];
-  onAddItem: (slotId: string) => void;
+  onAddItem: (jobId: string, urlId: string) => void;
 };
 
-function SubmitUrlForm({ onAddItem }: ItemListProps) {
+function SubmitUrlForm({ jobId, items, onAddItem }: ItemListProps) {
   const [url, setUrl] = useState("");
 
   function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
-
-    console.log("Submitted URL:", url);
-
+    onAddItem(jobId, url);
     setUrl("");
   }
 
@@ -27,7 +26,9 @@ function SubmitUrlForm({ onAddItem }: ItemListProps) {
         placeholder="Paste video URL"
       />
 
-      <button type="submit">Import Video</button>
+      <button type="submit" onClick={() => onAddItem}>
+        Import Video
+      </button>
     </form>
   );
 }
