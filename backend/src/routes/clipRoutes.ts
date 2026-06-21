@@ -40,7 +40,7 @@ router.post("/:jobId/import-url", (req, res) => {
     "python",
     ".venv",
     "Scripts",
-    "python.exe"
+    "python.exe",
   );
 
   const clipId = randomUUID();
@@ -91,11 +91,9 @@ router.post("/:jobId/import-url", (req, res) => {
 
     return res.json({
       message: "Clip imported successfully.",
-      clip: {
-        id: clipId,
-        fileName: downloadedFile,
-        videoUrl: `http://localhost:8000/jobs/${jobId}/clips/${downloadedFile}`,
-      },
+      id: clipId,
+      fileName: downloadedFile,
+      videoUrl: `http://localhost:8000/jobs/${jobId}/clips/${downloadedFile}`,
     });
   });
 });
@@ -119,7 +117,7 @@ router.get("/:jobId/clips/:fileName", (req, res) => {
     "jobs",
     jobId,
     "input",
-    fileName
+    fileName,
   );
 
   if (!fs.existsSync(filePath)) {

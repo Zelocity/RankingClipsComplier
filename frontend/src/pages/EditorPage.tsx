@@ -15,7 +15,7 @@ function EditorPage() {
   return (
     <div className="container">
       <DraggableItemList items={itemList} onDeleteItem={handleDeleteItem} />
-      <SubmitUrlForm jobId={jobId} items={itemList} onAddItem={handleAddItem} />
+      <SubmitUrlForm jobId={jobId} onAddItem={handleAddItem} />
     </div>
   );
 }

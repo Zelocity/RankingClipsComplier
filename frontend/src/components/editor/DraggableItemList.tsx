@@ -61,9 +61,9 @@ function DraggableItemList({ items, onDeleteItem }: DraggableItemListProps) {
             <div className="item" data-swapy-item={itemId}>
               <span>{item.title}</span>
 
-              {item.url ? (
+              {item.videoUrlId ? (
                 <video className="video-preview" controls>
-                  <source src={item.url} type="video/mp4" />
+                  <source src={item.videoUrlId} type="video/mp4" />
                   Your browser does not support this video.
                 </video>
               ) : (

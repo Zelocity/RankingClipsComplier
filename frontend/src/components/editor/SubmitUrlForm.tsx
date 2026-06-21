@@ -1,20 +1,34 @@
-import { useState } from "react";
+import { useState, type FormEvent } from "react";
 
-import type { Item } from "../../utils/listUtils";
-
-type ItemListProps = {
+type SubmitUrlFormProps = {
   jobId: string;
-  items: Item[];
-  onAddItem: (jobId: string, urlId: string) => void;
+  onAddItem: (jobId: string, url: string) => Promise<void>;
 };
 
-function SubmitUrlForm({ jobId, items, onAddItem }: ItemListProps) {
+function SubmitUrlForm({ jobId, onAddItem }: SubmitUrlFormProps) {
   const [url, setUrl] = useState("");
+  const [isImporting, setIsImporting] = useState(false);
 
-  function handleSubmit(event: React.FormEvent) {
+  async function handleSubmit(event: FormEvent) {
     event.preventDefault();
-    onAddItem(jobId, url);
-    setUrl("");
+
+    if (!url) {
+      console.log("Please enter a video URL");
+      return;
+    }
+
+    try {
+      setIsImporting(true);
+
+      console.log("Submitting URL:", url);
+      await onAddItem(jobId, url);
+
+      setUrl("");
+    } catch (error) {
+      console.error("Failed to import video:", error);
+    } finally {
+      setIsImporting(false);
+    }
   }
 
   return (
@@ -24,10 +38,12 @@ function SubmitUrlForm({ jobId, items, onAddItem }: ItemListProps) {
         value={url}
         onChange={(event) => setUrl(event.target.value)}
         placeholder="Paste video URL"
+        disabled={isImporting}
+        required
       />
 
-      <button type="submit" onClick={() => onAddItem}>
-        Import Video
+      <button type="submit" disabled={isImporting}>
+        {isImporting ? "Importing..." : "Import Video"}
       </button>
     </form>
   );
