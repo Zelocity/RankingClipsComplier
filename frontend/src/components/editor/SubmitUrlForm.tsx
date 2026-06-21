@@ -1,6 +1,17 @@
 import { useState } from "react";
 
-function UrlForm() {
+export type Item = {
+  slotId: string;
+  title: string;
+  url: string;
+};
+
+type ItemListProps = {
+  items: Item[];
+  onAddItem: (slotId: string) => void;
+};
+
+function SubmitUrlForm({ onAddItem }: ItemListProps) {
   const [url, setUrl] = useState("");
 
   function handleSubmit(event: React.FormEvent) {
@@ -25,4 +36,4 @@ function UrlForm() {
   );
 }
 
-export default UrlForm;
+export default SubmitUrlForm;

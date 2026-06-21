@@ -1,25 +1,24 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useParams } from "react-router-dom";
 import { createSwapy, utils } from "swapy";
 import type { SlotItemMapArray, Swapy } from "swapy";
-
-export type Item = {
-  id: string;
-  title: string;
-  url: string;
-};
+import type { Item } from "../../utils/listUtils";
+// import { importClipFromUrl } from "../../api/clipApi";
 
 type DraggableItemListProps = {
   items: Item[];
-  onDeleteItem: (itemId: string) => void;
+  onDeleteItem: (slotId: string) => void;
 };
 
 function DraggableItemList({ items, onDeleteItem }: DraggableItemListProps) {
+  const { jobId } = useParams();
+
   const [slotItemMap, setSlotItemMap] = useState<SlotItemMapArray>(
-    utils.initSlotItemMap(items, "id"),
+    utils.initSlotItemMap(items, "slotId"),
   );
 
   const slottedItems = useMemo(() => {
-    return utils.toSlottedItems(items, "id", slotItemMap);
+    return utils.toSlottedItems(items, "slotId", slotItemMap);
   }, [items, slotItemMap]);
 
   const swapyRef = useRef<Swapy | null>(null);
@@ -29,7 +28,7 @@ function DraggableItemList({ items, onDeleteItem }: DraggableItemListProps) {
     utils.dynamicSwapy(
       swapyRef.current,
       items,
-      "id",
+      "slotId",
       slotItemMap,
       setSlotItemMap,
     );
@@ -45,6 +44,7 @@ function DraggableItemList({ items, onDeleteItem }: DraggableItemListProps) {
 
     swapyRef.current.onSwap((event) => {
       setSlotItemMap(event.newSlotItemMap.asArray);
+
       console.log("New slot item map:", event.newSlotItemMap.asArray);
     });
 
@@ -59,17 +59,21 @@ function DraggableItemList({ items, onDeleteItem }: DraggableItemListProps) {
       {slottedItems.map(({ slotId, itemId, item }) => (
         <div className="slot" key={slotId} data-swapy-slot={slotId}>
           {item && (
-            <div className="item" key={itemId} data-swapy-item={itemId}>
+            <div className="item" data-swapy-item={itemId}>
               <span>{item.title}</span>
 
-              <video className="video-preview" controls>
-                {/* <source src={clip.videoUrl} type="video/mp4" /> */}
-              </video>
-
+              {item.url ? (
+                <video className="video-preview" controls>
+                  <source src={item.url} type="video/mp4" />
+                  Your browser does not support this video.
+                </video>
+              ) : (
+                <p>No video URL yet.</p>
+              )}
               <button
                 className="delete"
                 data-swapy-no-drag
-                onClick={() => onDeleteItem(item.id)}
+                onClick={() => onDeleteItem(item.slotId)}
               >
                 Delete
               </button>
