@@ -33,7 +33,7 @@ export function createNewItem(nextId: number): Item {
 }
 
 export function useItemList() {
-  const [items, setItems] = useState<Item[]>(initialItems);
+  const [itemList, setItems] = useState<Item[]>(initialItems);
 
   // Keeps the next ID after React re-renders the page.
   const nextIdRef = useRef(4);
@@ -53,7 +53,7 @@ export function useItemList() {
   }
 
   return {
-    items,
+    itemList,
     setItems,
     handleAddItem,
     handleDeleteItem,

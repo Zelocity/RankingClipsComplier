@@ -1,10 +1,6 @@
 import { useState } from "react";
 
-export type Item = {
-  slotId: string;
-  title: string;
-  url: string;
-};
+import type { Item } from "../../utils/listUtils";
 
 type ItemListProps = {
   items: Item[];

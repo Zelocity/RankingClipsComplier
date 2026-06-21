@@ -3,7 +3,6 @@ import { useParams } from "react-router-dom";
 import { createSwapy, utils } from "swapy";
 import type { SlotItemMapArray, Swapy } from "swapy";
 import type { Item } from "../../utils/listUtils";
-// import { importClipFromUrl } from "../../api/clipApi";
 
 type DraggableItemListProps = {
   items: Item[];
