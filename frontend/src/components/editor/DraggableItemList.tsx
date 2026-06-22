@@ -15,8 +15,6 @@ function DraggableItemList({ items, onDeleteItem }: DraggableItemListProps) {
     utils.initSlotItemMap(items, "slotId"),
   );
 
-  const [collapsedItems, setCollapsedItems] = useState<Set<string>>(new Set());
-
   const swapyRef = useRef<Swapy | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
 
@@ -24,8 +22,10 @@ function DraggableItemList({ items, onDeleteItem }: DraggableItemListProps) {
     return utils.toSlottedItems(items, "slotId", slotItemMap);
   }, [items, slotItemMap]);
 
+  const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
+
   function toggleCollapsedItem(slotId: string) {
-    setCollapsedItems((previousItems) => {
+    setExpandedItems((previousItems) => {
       const updatedItems = new Set(previousItems);
 
       if (updatedItems.has(slotId)) {
@@ -88,7 +88,7 @@ function DraggableItemList({ items, onDeleteItem }: DraggableItemListProps) {
           return <div className="slot" key={slotId} data-swapy-slot={slotId} />;
         }
 
-        const isCollapsed = collapsedItems.has(item.slotId);
+        const isCollapsed = !expandedItems.has(item.slotId);
 
         return (
           <div className="slot" key={slotId} data-swapy-slot={slotId}>
