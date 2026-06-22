@@ -6,11 +6,11 @@ import { useItemList } from "../utils/listUtils";
 
 function EditorPage() {
   const { jobId } = useParams();
-  const { itemList, handleAddItem, handleDeleteItem } = useItemList();
-
   if (!jobId) {
     return <p>No job ID found.</p>;
   }
+
+  const { itemList, handleAddItem, handleDeleteItem } = useItemList(jobId);
 
   return (
     <div className="container">

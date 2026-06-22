@@ -98,6 +98,37 @@ router.post("/:jobId/import-url", (req, res) => {
   });
 });
 
+router.get("/:jobId/clips", (req, res) => {
+  const { jobId } = req.params;
+
+  if (!isValidJobId(jobId)) {
+    return res.status(400).json({ message: "Invalid job ID." });
+  }
+
+  const projectRoot = path.resolve(process.cwd(), "..");
+
+  const inputPath = path.join(projectRoot, "storage", "jobs", jobId, "input");
+
+  if (!fs.existsSync(inputPath)) {
+    return res.status(404).json({ message: "Job does not exist." });
+  }
+
+  const clips = fs
+    .readdirSync(inputPath)
+    .filter((file) => file.endsWith(".mp4"))
+    .map((file) => {
+      const clipId = path.parse(file).name;
+
+      return {
+        id: clipId,
+        fileName: file,
+        videoUrl: `http://localhost:8000/jobs/${jobId}/clips/${file}`,
+      };
+    });
+
+  return res.json({ clips });
+});
+
 router.get("/:jobId/clips/:fileName", (req, res) => {
   const { jobId, fileName } = req.params;
 

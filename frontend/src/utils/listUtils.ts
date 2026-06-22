@@ -1,65 +1,66 @@
-import { useRef, useState } from "react";
-import { importClipFromUrl } from "../api/clipApi";
+import { useEffect, useState } from "react";
+import { getClipsForJob, importClipFromUrl, type Clip } from "../api/clipApi";
 
 export type Item = {
   slotId: string;
   title: string;
-  videoUrlId: string;
+  videoUrl: string;
 };
 
-const initialItems: Item[] = [
-  {
-    slotId: "1",
-    title: "1",
-    videoUrlId: "https://www.youtube.com/shorts/02Q-tlITPM0",
-  },
-  {
-    slotId: "2",
-    title: "2",
-    videoUrlId: "https://www.youtube.com/shorts/NcrWp5et0cs",
-  },
-  {
-    slotId: "3",
-    title: "3",
-    videoUrlId: "https://www.youtube.com/shorts/Z3HeIJDqxcc",
-  },
-];
-
-export function createNewItem(nextId: number, videoUrlId: string): Item {
+function createItemFromClip(clip: Clip): Item {
   return {
-    slotId: `${nextId}`,
-    title: `${nextId}`,
-    videoUrlId: `${videoUrlId}`,
+    slotId: clip.id,
+    title: clip.fileName,
+    videoUrl: clip.videoUrl,
   };
 }
 
-export function useItemList() {
-  const [itemList, setItems] = useState<Item[]>(initialItems);
+export function useItemList(currentJobId: string | undefined) {
+  const [itemList, setItems] = useState<Item[]>([]);
 
-  // Keeps the next ID after React re-renders the page.
-  const nextIdRef = useRef(4);
+  useEffect(() => {
+    if (!currentJobId) {
+      setItems([]);
+      return;
+    }
+
+    let cancelled = false;
+
+    async function loadSavedClips() {
+      try {
+        const clips = await getClipsForJob(currentJobId);
+
+        if (cancelled) return;
+
+        const restoredItems = clips.map(createItemFromClip);
+
+        console.log("Restored clips:", restoredItems);
+
+        setItems(restoredItems);
+      } catch (error) {
+        console.error("Could not load saved clips:", error);
+      }
+    }
+
+    void loadSavedClips();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentJobId]);
 
   async function handleAddItem(jobId: string, url: string) {
     try {
-      console.log("Importing:", { jobId, url });
-
       const result = await importClipFromUrl(jobId, url);
 
-      console.log("Backend returned:", result);
-      console.log("videoUrl:", result?.videoUrl);
-
-      if (!result?.videoUrl) {
-        console.error("No videoUrl was returned:", result);
+      if (!result.videoUrl) {
+        console.error("No video URL returned:", result);
         return;
       }
 
-      const newItem = createNewItem(nextIdRef.current, result.videoUrl);
-
-      console.log("New item being added:", newItem);
+      const newItem = createItemFromClip(result);
 
       setItems((previousItems) => [...previousItems, newItem]);
-
-      nextIdRef.current++;
     } catch (error) {
       console.error("Could not import clip:", error);
     }

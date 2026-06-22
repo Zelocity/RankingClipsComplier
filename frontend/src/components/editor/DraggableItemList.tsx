@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useParams } from "react-router-dom";
 import { createSwapy, utils } from "swapy";
 import type { SlotItemMapArray, Swapy } from "swapy";
 import type { Item } from "../../utils/listUtils";
@@ -10,8 +9,6 @@ type DraggableItemListProps = {
 };
 
 function DraggableItemList({ items, onDeleteItem }: DraggableItemListProps) {
-  const { jobId } = useParams();
-
   const [slotItemMap, setSlotItemMap] = useState<SlotItemMapArray>(
     utils.initSlotItemMap(items, "slotId"),
   );
@@ -61,9 +58,9 @@ function DraggableItemList({ items, onDeleteItem }: DraggableItemListProps) {
             <div className="item" data-swapy-item={itemId}>
               <span>{item.title}</span>
 
-              {item.videoUrlId ? (
+              {item.videoUrl ? (
                 <video className="video-preview" controls>
-                  <source src={item.videoUrlId} type="video/mp4" />
+                  <source src={item.videoUrl} type="video/mp4" />
                   Your browser does not support this video.
                 </video>
               ) : (
