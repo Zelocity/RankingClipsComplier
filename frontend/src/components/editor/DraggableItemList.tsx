@@ -1,13 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createSwapy, utils } from "swapy";
 import type { SlotItemMapArray, Swapy } from "swapy";
-import {
-  IoChevronDownCircleSharp,
-  IoChevronUpCircleSharp,
-} from "react-icons/io5";
 
+import { Icons } from "../icons";
 import type { Item } from "../../utils/listUtils";
-import "./DraggableItemList.css";
 
 type DraggableItemListProps = {
   items: Item[];
@@ -19,16 +15,16 @@ function DraggableItemList({ items, onDeleteItem }: DraggableItemListProps) {
     utils.initSlotItemMap(items, "slotId"),
   );
 
-  const swapyRef = useRef<Swapy | null>(null);
+  const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
+
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const swapyRef = useRef<Swapy | null>(null);
 
   const slottedItems = useMemo(() => {
     return utils.toSlottedItems(items, "slotId", slotItemMap);
   }, [items, slotItemMap]);
 
-  const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
-
-  function toggleCollapsedItem(slotId: string) {
+  function handleToggleExpanded(slotId: string) {
     setExpandedItems((previousItems) => {
       const updatedItems = new Set(previousItems);
 
@@ -63,19 +59,6 @@ function DraggableItemList({ items, onDeleteItem }: DraggableItemListProps) {
   }, []);
 
   useEffect(() => {
-    const currentOrder = slottedItems.map(
-      ({ slotId, itemId, item }, index) => ({
-        rank: index + 1,
-        slotId,
-        itemId,
-        title: item?.title,
-      }),
-    );
-
-    console.table(currentOrder);
-  }, [slottedItems]);
-
-  useEffect(() => {
     utils.dynamicSwapy(
       swapyRef.current,
       items,
@@ -86,60 +69,85 @@ function DraggableItemList({ items, onDeleteItem }: DraggableItemListProps) {
   }, [items]);
 
   return (
-    <div className="items" ref={containerRef}>
+    <div ref={containerRef} className="flex flex-col gap-3">
       {slottedItems.map(({ slotId, itemId, item }) => {
         if (!item) {
-          return <div className="slot" key={slotId} data-swapy-slot={slotId} />;
+          return (
+            <div
+              key={slotId}
+              data-swapy-slot={slotId}
+              className="min-h-16 rounded-xl border-3 border-dashed border-slate-700"
+            />
+          );
         }
 
-        const isCollapsed = !expandedItems.has(item.slotId);
+        const isExpanded = expandedItems.has(item.slotId);
 
         return (
-          <div className="slot" key={slotId} data-swapy-slot={slotId}>
+          <div
+            key={slotId}
+            data-swapy-slot={slotId}
+            className="rounded-xl border border-slate-700 bg-slate-900 p-1"
+          >
             <div
-              className={`item ${isCollapsed ? "item-collapsed" : ""}`}
               data-swapy-item={itemId}
+              className={`overflow-hidden rounded-lg border bg-slate-700 drop-shadow-sm transition-colors duration-20 p-1 ${
+                isExpanded
+                  ? "border-violet-500"
+                  : "border-slate-700 hover:border-violet-400"
+              }`}
             >
-              <div className="item-header">
-                <span className="item-title">⋮⋮ {item.title}</span>
+              <div className="flex min-h-14 items-center justify-between bg-slate-900 px-4 py-3">
+                <span className="flex items-center gap-2 truncate font-medium text-slate-100">
+                  <span className="cursor-grab text-slate-500">⋮⋮</span>
+                  {item.title}
+                </span>
 
                 <button
                   type="button"
-                  className="collapse-button"
                   data-swapy-no-drag
-                  onClick={() => toggleCollapsedItem(item.slotId)}
+                  onClick={() => handleToggleExpanded(item.slotId)}
+                  aria-label={isExpanded ? "Collapse video" : "Expand video"}
+                  className="rounded-md p-2 text-slate-400 transition hover:bg-slate-700 hover:text-white"
                 >
-                  {isCollapsed ? (
-                    <IoChevronDownCircleSharp size={22} />
+                  {isExpanded ? (
+                    <Icons.ChevronUp size={20} />
                   ) : (
-                    <IoChevronUpCircleSharp size={22} />
+                    <Icons.ChevronDown size={20} />
                   )}
                 </button>
               </div>
-              <div className="item-video-container">
-                {!isCollapsed &&
-                  (item.videoUrl ? (
-                    <video
-                      className="video-preview"
-                      src={item.videoUrl}
-                      controls
-                      data-swapy-no-drag
-                    />
-                  ) : (
-                    <p>No video URL yet.</p>
-                  ))}
-              </div>
 
-              {/* <div className="item-actions">
-                <button
-                  className="delete"
-                  type="button"
-                  data-swapy-no-drag
-                  onClick={() => onDeleteItem(item.slotId)}
-                >
-                  Delete
-                </button>
-              </div> */}
+              {isExpanded && (
+                <div className="grid min-h-max grid-cols-[300px_minmax(0,1fr)] bg-slate-800 text-white">
+                  <aside className="border-r-2 border-dashed border-fuchsia-200 flex items-center justify-center">
+                    {item.videoUrl ? (
+                      <video
+                        className="aspect-[9/16] w-full max-w-70 bg-black object-contain"
+                        src={item.videoUrl}
+                        controls
+                        data-swapy-no-drag
+                      />
+                    ) : (
+                      <p className="text-sm text-slate-400">
+                        No video URL yet.
+                      </p>
+                    )}
+                  </aside>
+                  <main>
+                    <div className="mt-4 flex justify-end">
+                      <button
+                        type="button"
+                        data-swapy-no-drag
+                        onClick={() => onDeleteItem(item.slotId)}
+                        className="rounded-md border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm font-medium text-red-300 transition hover:bg-red-500/20"
+                      >
+                        Delete clip
+                      </button>
+                    </div>
+                  </main>
+                </div>
+              )}
             </div>
           </div>
         );
