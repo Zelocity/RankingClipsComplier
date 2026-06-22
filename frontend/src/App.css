@@ -473,6 +473,20 @@ a {
   margin-top: 8px;
 } */
 
+html,
+body,
+#root {
+  margin: 0;
+  min-height: 100%;
+  width: 100%;
+}
+
+#root {
+  max-width: none;
+  padding: 0;
+  text-align: left;
+}
+
 * {
   box-sizing: border-box;
 }
@@ -486,31 +500,6 @@ a {
 .items {
   display: grid;
   gap: 12px;
-}
-
-.slot {
-  min-height: 80px;
-  padding: 12px;
-  border: 2px dashed #4b5563;
-  border-radius: 12px;
-  overflow: visible;
-}
-
-.item {
-  width: 100%;
-  min-height: 56px;
-  background: #1f2937;
-  color: white;
-  padding: 18px;
-  border-radius: 10px;
-
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-
-  cursor: grab;
-  border: none;
-  font: inherit;
 }
 
 .item:active {

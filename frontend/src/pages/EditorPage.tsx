@@ -1,4 +1,5 @@
 import { useParams } from "react-router-dom";
+import "./EditorPage.css";
 
 import DraggableItemList from "../components/editor/DraggableItemList";
 import SubmitUrlForm from "../components/editor/SubmitUrlForm";
@@ -15,31 +16,27 @@ function EditorPage() {
 
   return (
     <div className="editor-page">
-      <section className="clip-panel">
-        <div className="clip-panel-header">
-          <h2>Clips</h2>
+      <aside className="clip-panel">
+        <h2>Video Clips</h2>
 
-          <SubmitUrlForm jobId={jobId} onAddItem={handleAddItem} />
-        </div>
+        <SubmitUrlForm jobId={jobId} onAddItem={handleAddItem} />
 
         <DraggableItemList items={itemList} onDeleteItem={handleDeleteItem} />
-      </section>
+      </aside>
 
-      <section className="preview-panel">
+      <main className="preview-panel">
         <h2>Compiled Video</h2>
 
         <div className="compiled-video-container">
-          <p>Your compiled video will appear here.</p>
-
-          {/*
-          <video className="compiled-video" controls>
-            <source src={compiledVideoUrl} type="video/mp4" />
-          </video>
-          */}
+          <div className="compiled-video-placeholder">
+            Compiled video preview
+          </div>
         </div>
 
-        <button className="compile-button">Compile Video</button>
-      </section>
+        <button className="compile-button" type="button">
+          Compile Video
+        </button>
+      </main>
     </div>
   );
 }
