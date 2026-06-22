@@ -1,6 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createSwapy, utils } from "swapy";
 import type { SlotItemMapArray, Swapy } from "swapy";
+import {
+  IoChevronDownCircleSharp,
+  IoChevronUpCircleSharp,
+} from "react-icons/io5";
 
 import type { Item } from "../../utils/listUtils";
 import "./DraggableItemList.css";
@@ -105,7 +109,11 @@ function DraggableItemList({ items, onDeleteItem }: DraggableItemListProps) {
                   data-swapy-no-drag
                   onClick={() => toggleCollapsedItem(item.slotId)}
                 >
-                  {isCollapsed ? "Expand" : "Collapse"}
+                  {isCollapsed ? (
+                    <IoChevronDownCircleSharp size={22} />
+                  ) : (
+                    <IoChevronUpCircleSharp size={22} />
+                  )}
                 </button>
               </div>
               <div className="item-video-container">
