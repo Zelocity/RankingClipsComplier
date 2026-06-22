@@ -108,27 +108,30 @@ function DraggableItemList({ items, onDeleteItem }: DraggableItemListProps) {
                   {isCollapsed ? "Expand" : "Collapse"}
                 </button>
               </div>
+              <div className="item-video-container">
+                {!isCollapsed &&
+                  (item.videoUrl ? (
+                    <video
+                      className="video-preview"
+                      src={item.videoUrl}
+                      controls
+                      data-swapy-no-drag
+                    />
+                  ) : (
+                    <p>No video URL yet.</p>
+                  ))}
+              </div>
 
-              {!isCollapsed &&
-                (item.videoUrl ? (
-                  <video
-                    className="video-preview"
-                    src={item.videoUrl}
-                    controls
-                    data-swapy-no-drag
-                  />
-                ) : (
-                  <p>No video URL yet.</p>
-                ))}
-
-              <button
-                className="delete"
-                type="button"
-                data-swapy-no-drag
-                onClick={() => onDeleteItem(item.slotId)}
-              >
-                Delete
-              </button>
+              {/* <div className="item-actions">
+                <button
+                  className="delete"
+                  type="button"
+                  data-swapy-no-drag
+                  onClick={() => onDeleteItem(item.slotId)}
+                >
+                  Delete
+                </button>
+              </div> */}
             </div>
           </div>
         );

@@ -1,45 +1,72 @@
-/* .items {
+.items {
   display: flex;
   flex-direction: column;
-  gap: 0px;
-} */
+  gap: 20px;
+  stroke: salmon;
+}
 
 .slot {
   min-height: 60px;
-  padding: 3px;
+  padding: 1px;
   width: 100%;
   border: 2px dashed #4b6588;
   border-radius: 12px;
   overflow: visible;
+  background: #111827;
 }
 
 .item {
   width: 100%;
   min-height: 56px;
-  box-sizing: border-box;
-  border: 1px solid #2b5371;
-  border-radius: 8px;
-  background: #06152a;
-  color: rgb(255, 255, 255);
-  padding: 18px;
-  cursor: grab;
-  font: inherit;
+  background: #111827;
+  color: white;
+  border-radius: 10px;
+  overflow: hidden;
+
   display: flex;
-  justify-content: space-between;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0;
+
+  cursor: grab;
+}
+
+.item-header {
+  width: 100%;
+  min-height: 52px;
+  padding: 12px 16px;
+  box-sizing: border-box;
+
+  display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+
+  background: #242f46;
+}
+
+.item-video-container {
+  width: 100%;
+}
+
+.item-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.video-preview {
+  display: block;
+  width: 100%;
+  max-width: 280px;
+  height: auto;
+  aspect-ratio: 9 / 16;
+  object-fit: contain;
 }
 
 */ .item-collapsed {
   width: 190px;
   min-height: 52px;
-  padding: 8px 10px;
-}
-
-.item-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 40px;
+  padding: 2px 3px;
 }
 
 .drag-handle {
@@ -51,15 +78,6 @@
 
 .drag-handle:active {
   cursor: grabbing;
-}
-
-.video-preview {
-  display: block;
-  width: 100%;
-  max-width: 500px;
-  max-height: 500px;
-  margin: 10px 0;
-  object-fit: contain;
 }
 
 .collapse-button,

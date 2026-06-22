@@ -9,15 +9,16 @@
 
 .clip-panel {
   min-width: 0;
-  padding: 20px;
+  padding: 35px;
   overflow-y: auto;
-  border-right: 1px solid #374151;
+  border-right: 5px solid #374151;
+  border-left: 5px solid #374151;
   background: #1f2937;
 }
 
 .preview-panel {
   min-width: 0;
-  padding: 32px;
+  padding: 100px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -56,6 +57,6 @@
 
   .clip-panel {
     border-right: none;
-    border-bottom: 1px solid #374151;
+    border-bottom: 100px solid #374151;
   }
 }
