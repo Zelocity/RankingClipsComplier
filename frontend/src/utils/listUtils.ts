@@ -7,10 +7,10 @@ export type Item = {
   videoUrl: string;
 };
 
-function createItemFromClip(clip: Clip): Item {
+function createItemFromClip(clip: Clip, titleNumber: number): Item {
   return {
     slotId: clip.id,
-    title: clip.fileName,
+    title: `Untitled ${titleNumber}`,
     videoUrl: clip.videoUrl,
   };
 }
@@ -32,7 +32,9 @@ export function useItemList(currentJobId: string | undefined) {
 
         if (cancelled) return;
 
-        const restoredItems = clips.map(createItemFromClip);
+        const restoredItems = clips.map((clip, index) =>
+          createItemFromClip(clip, index + 1),
+        );
 
         console.log("Restored clips:", restoredItems);
 
@@ -58,7 +60,7 @@ export function useItemList(currentJobId: string | undefined) {
         return;
       }
 
-      const newItem = createItemFromClip(result);
+      const newItem = createItemFromClip(result, itemList.length + 1);
 
       setItems((previousItems) => [...previousItems, newItem]);
     } catch (error) {

@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createSwapy, utils } from "swapy";
 import type { SlotItemMapArray, Swapy } from "swapy";
+
 import type { Item } from "../../utils/listUtils";
+import "./DraggableItemList.css";
 
 type DraggableItemListProps = {
   items: Item[];
@@ -13,12 +15,61 @@ function DraggableItemList({ items, onDeleteItem }: DraggableItemListProps) {
     utils.initSlotItemMap(items, "slotId"),
   );
 
+  const [collapsedItems, setCollapsedItems] = useState<Set<string>>(new Set());
+
+  const swapyRef = useRef<Swapy | null>(null);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+
   const slottedItems = useMemo(() => {
     return utils.toSlottedItems(items, "slotId", slotItemMap);
   }, [items, slotItemMap]);
 
-  const swapyRef = useRef<Swapy | null>(null);
-  const containerRef = useRef<HTMLDivElement | null>(null);
+  function toggleCollapsedItem(slotId: string) {
+    setCollapsedItems((previousItems) => {
+      const updatedItems = new Set(previousItems);
+
+      if (updatedItems.has(slotId)) {
+        updatedItems.delete(slotId);
+      } else {
+        updatedItems.add(slotId);
+      }
+
+      return updatedItems;
+    });
+  }
+
+  useEffect(() => {
+    if (!containerRef.current) return;
+
+    swapyRef.current = createSwapy(containerRef.current, {
+      manualSwap: true,
+      swapMode: "drop",
+      dragAxis: "y",
+      animation: "none",
+    });
+
+    swapyRef.current.onSwap((event) => {
+      setSlotItemMap(event.newSlotItemMap.asArray);
+    });
+
+    return () => {
+      swapyRef.current?.destroy();
+      swapyRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    const currentOrder = slottedItems.map(
+      ({ slotId, itemId, item }, index) => ({
+        rank: index + 1,
+        slotId,
+        itemId,
+        title: item?.title,
+      }),
+    );
+
+    console.table(currentOrder);
+  }, [slottedItems]);
 
   useEffect(() => {
     utils.dynamicSwapy(
@@ -30,53 +81,58 @@ function DraggableItemList({ items, onDeleteItem }: DraggableItemListProps) {
     );
   }, [items]);
 
-  useEffect(() => {
-    if (!containerRef.current) return;
-
-    swapyRef.current = createSwapy(containerRef.current, {
-      manualSwap: true,
-      animation: "dynamic",
-    });
-
-    swapyRef.current.onSwap((event) => {
-      setSlotItemMap(event.newSlotItemMap.asArray);
-
-      console.log("New slot item map:", event.newSlotItemMap.asArray);
-    });
-
-    return () => {
-      swapyRef.current?.destroy();
-      swapyRef.current = null;
-    };
-  }, []);
-
   return (
     <div className="items" ref={containerRef}>
-      {slottedItems.map(({ slotId, itemId, item }) => (
-        <div className="slot" key={slotId} data-swapy-slot={slotId}>
-          {item && (
-            <div className="item" data-swapy-item={itemId}>
-              <span>{item.title}</span>
+      {slottedItems.map(({ slotId, itemId, item }) => {
+        if (!item) {
+          return <div className="slot" key={slotId} data-swapy-slot={slotId} />;
+        }
 
-              {item.videoUrl ? (
-                <video className="video-preview" controls>
-                  <source src={item.videoUrl} type="video/mp4" />
-                  Your browser does not support this video.
-                </video>
-              ) : (
-                <p>No video URL yet.</p>
-              )}
+        const isCollapsed = collapsedItems.has(item.slotId);
+
+        return (
+          <div className="slot" key={slotId} data-swapy-slot={slotId}>
+            <div
+              className={`item ${isCollapsed ? "item-collapsed" : ""}`}
+              data-swapy-item={itemId}
+            >
+              <div className="item-header">
+                <span className="item-title">⋮⋮ {item.title}</span>
+
+                <button
+                  type="button"
+                  className="collapse-button"
+                  data-swapy-no-drag
+                  onClick={() => toggleCollapsedItem(item.slotId)}
+                >
+                  {isCollapsed ? "Expand" : "Collapse"}
+                </button>
+              </div>
+
+              {!isCollapsed &&
+                (item.videoUrl ? (
+                  <video
+                    className="video-preview"
+                    src={item.videoUrl}
+                    controls
+                    data-swapy-no-drag
+                  />
+                ) : (
+                  <p>No video URL yet.</p>
+                ))}
+
               <button
                 className="delete"
+                type="button"
                 data-swapy-no-drag
                 onClick={() => onDeleteItem(item.slotId)}
               >
                 Delete
               </button>
             </div>
-          )}
-        </div>
-      ))}
+          </div>
+        );
+      })}
     </div>
   );
 }
