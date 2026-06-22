@@ -1,3 +1,5 @@
+@import "tailwindcss";
+
 .editor-page {
   display: grid;
   grid-template-columns: 1000px minmax(0, 1fr);
