@@ -1,5 +1,5 @@
 import { useParams } from "react-router-dom";
-import "./EditorPage.css";
+//import "./EditorPage.css";
 
 import DraggableItemList from "../components/editor/DraggableItemList";
 import SubmitUrlForm from "../components/editor/SubmitUrlForm";
