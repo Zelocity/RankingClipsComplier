@@ -1,5 +1,6 @@
 import { Icons } from "../icons";
 import type { Item } from "../../utils/listUtils";
+import ClipSetting from "./ClipSetting";
 
 type ClipCardProps = {
   item: Item;
@@ -83,11 +84,9 @@ function ClipCard({
           </aside>
 
           <main className="p-5">
-            <h3 className="text-lg font-semibold">Clip Settings</h3>
+            <h3 className="text-lg font-semibold pb-3">Clip Settings</h3>
 
-            <p className="mt-2 text-sm text-slate-400">
-              Editing controls for this clip will go here.
-            </p>
+            <ClipSetting />
           </main>
         </div>
       )}
