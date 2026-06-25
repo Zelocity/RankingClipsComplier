@@ -9,6 +9,7 @@ type ClipCardProps = {
   onToggleExpanded: (slotId: string) => void;
   onDeleteItem: (slotId: string) => void;
   onDragHandlePointerDown: () => void;
+  onUpdateItemTitle: (slotId: string, newTitle: string) => void;
 };
 
 function ClipCard({
@@ -18,6 +19,7 @@ function ClipCard({
   onToggleExpanded,
   onDeleteItem,
   onDragHandlePointerDown,
+  onUpdateItemTitle,
 }: ClipCardProps) {
   return (
     <div
@@ -86,7 +88,7 @@ function ClipCard({
           <main className="p-5">
             <h3 className="text-lg font-semibold pb-3">Clip Settings</h3>
 
-            <ClipSetting />
+            <ClipSetting item={item} onUpdateItemTitle={onUpdateItemTitle} />
           </main>
         </div>
       )}

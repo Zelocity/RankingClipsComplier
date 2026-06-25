@@ -9,9 +9,14 @@ import type { Item } from "../../utils/listUtils";
 type DraggableItemListProps = {
   items: Item[];
   onDeleteItem: (slotId: string) => void;
+  onUpdateItemTitle: (slotId: string, newTitle: string) => void;
 };
 
-function DraggableItemList({ items, onDeleteItem }: DraggableItemListProps) {
+function DraggableItemList({
+  items,
+  onDeleteItem,
+  onUpdateItemTitle,
+}: DraggableItemListProps) {
   const [slotItemMap, setSlotItemMap] = useState<SlotItemMapArray>(
     utils.initSlotItemMap(items, "slotId"),
   );
@@ -104,6 +109,7 @@ function DraggableItemList({ items, onDeleteItem }: DraggableItemListProps) {
               isExpanded={expandedItems.has(item.slotId)}
               onToggleExpanded={handleToggleExpanded}
               onDeleteItem={onDeleteItem}
+              onUpdateItemTitle={onUpdateItemTitle}
               onDragHandlePointerDown={handleDragHandlePointerDown}
             />
           </div>

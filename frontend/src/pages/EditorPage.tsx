@@ -8,7 +8,8 @@ import { useItemList } from "../utils/listUtils";
 function EditorPage() {
   const { jobId } = useParams<{ jobId: string }>();
 
-  const { itemList, handleAddItem, handleDeleteItem } = useItemList(jobId);
+  const { itemList, handleAddItem, handleDeleteItem, handleUpdateItemTitle } =
+    useItemList(jobId);
 
   if (!jobId) {
     return <p>No job ID found.</p>;
@@ -21,7 +22,11 @@ function EditorPage() {
 
         <SubmitUrlForm jobId={jobId} onAddItem={handleAddItem} />
 
-        <DraggableItemList items={itemList} onDeleteItem={handleDeleteItem} />
+        <DraggableItemList
+          items={itemList}
+          onDeleteItem={handleDeleteItem}
+          onUpdateItemTitle={handleUpdateItemTitle}
+        />
       </aside>
 
       <main className="flex flex-col items-center p-8">

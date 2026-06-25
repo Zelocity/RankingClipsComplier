@@ -6,12 +6,87 @@ import { randomUUID } from "crypto";
 
 const router = express.Router();
 
+type ClipMetadata = {
+  id: string;
+  fileName: string;
+  title: string;
+};
+
 function isValidJobId(jobId: string): boolean {
   return /^[A-Za-z0-9_-]+$/.test(jobId);
 }
 
 function isValidFileName(fileName: string): boolean {
   return /^[A-Za-z0-9_.-]+$/.test(fileName);
+}
+
+function getJobPaths(jobId: string) {
+  const projectRoot = path.resolve(process.cwd(), "..");
+  const jobPath = path.join(projectRoot, "storage", "jobs", jobId);
+
+  return {
+    projectRoot,
+    jobPath,
+    inputPath: path.join(jobPath, "input"),
+    metadataPath: path.join(jobPath, "clips.json"),
+  };
+}
+
+function readClipMetadata(metadataPath: string): ClipMetadata[] {
+  if (!fs.existsSync(metadataPath)) {
+    return [];
+  }
+
+  try {
+    const fileContents = fs.readFileSync(metadataPath, "utf8");
+    const clips = JSON.parse(fileContents);
+
+    return Array.isArray(clips) ? clips : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeClipMetadata(metadataPath: string, clips: ClipMetadata[]) {
+  fs.writeFileSync(metadataPath, JSON.stringify(clips, null, 2), "utf8");
+}
+
+function getSavedClips(
+  inputPath: string,
+  metadataPath: string,
+): ClipMetadata[] {
+  const videoFiles = fs
+    .readdirSync(inputPath)
+    .filter((file) => file.endsWith(".mp4"))
+    .sort();
+
+  const savedMetadata = readClipMetadata(metadataPath);
+
+  // Keep existing saved clip order and custom titles.
+  const savedClips = savedMetadata
+    .filter((clip) => videoFiles.includes(clip.fileName))
+    .map((clip, index) => ({
+      id: path.parse(clip.fileName).name,
+      fileName: clip.fileName,
+      title: clip.title?.trim() || `Untitled ${index + 1}`,
+    }));
+
+  const savedFileNames = new Set(savedClips.map((clip) => clip.fileName));
+
+  // Add videos that existed before clips.json was created.
+  const missingClips = videoFiles
+    .filter((fileName) => !savedFileNames.has(fileName))
+    .map((fileName, index) => ({
+      id: path.parse(fileName).name,
+      fileName,
+      title: `Untitled ${savedClips.length + index + 1}`,
+    }));
+
+  const clips = [...savedClips, ...missingClips];
+
+  writeClipMetadata(metadataPath, clips);
+
+  return clips;
 }
 
 router.post("/:jobId/import-url", (req, res) => {
@@ -26,10 +101,7 @@ router.post("/:jobId/import-url", (req, res) => {
     return res.status(400).json({ message: "URL is required." });
   }
 
-  const projectRoot = path.resolve(process.cwd(), "..");
-
-  const jobPath = path.join(projectRoot, "storage", "jobs", jobId);
-  const inputPath = path.join(jobPath, "input");
+  const { projectRoot, inputPath, metadataPath } = getJobPaths(jobId);
 
   if (!fs.existsSync(inputPath)) {
     return res.status(404).json({ message: "Job does not exist." });
@@ -89,11 +161,20 @@ router.post("/:jobId/import-url", (req, res) => {
       });
     }
 
+    const clips = getSavedClips(inputPath, metadataPath);
+
+    const importedClip = clips.find((clip) => clip.id === clipId);
+
+    if (!importedClip) {
+      return res.status(500).json({
+        message: "Downloaded clip metadata was not found.",
+      });
+    }
+
     return res.json({
       message: "Clip imported successfully.",
-      id: clipId,
-      fileName: downloadedFile,
-      videoUrl: `http://localhost:8000/jobs/${jobId}/clips/${downloadedFile}`,
+      ...importedClip,
+      videoUrl: `http://localhost:8000/jobs/${jobId}/clips/${importedClip.fileName}`,
     });
   });
 });
@@ -105,28 +186,76 @@ router.get("/:jobId/clips", (req, res) => {
     return res.status(400).json({ message: "Invalid job ID." });
   }
 
-  const projectRoot = path.resolve(process.cwd(), "..");
-
-  const inputPath = path.join(projectRoot, "storage", "jobs", jobId, "input");
+  const { inputPath, metadataPath } = getJobPaths(jobId);
 
   if (!fs.existsSync(inputPath)) {
     return res.status(404).json({ message: "Job does not exist." });
   }
 
-  const clips = fs
-    .readdirSync(inputPath)
-    .filter((file) => file.endsWith(".mp4"))
-    .map((file) => {
-      const clipId = path.parse(file).name;
+  const clips = getSavedClips(inputPath, metadataPath);
 
-      return {
-        id: clipId,
-        fileName: file,
-        videoUrl: `http://localhost:8000/jobs/${jobId}/clips/${file}`,
-      };
+  return res.json({
+    clips: clips.map((clip) => ({
+      ...clip,
+      videoUrl: `http://localhost:8000/jobs/${jobId}/clips/${clip.fileName}`,
+    })),
+  });
+});
+
+router.patch("/:jobId/clips/:clipId/title", (req, res) => {
+  const { jobId, clipId } = req.params;
+  const { title } = req.body;
+
+  if (!isValidJobId(jobId) || !isValidFileName(clipId)) {
+    return res.status(400).json({
+      message: "Invalid job ID or clip ID.",
     });
+  }
 
-  return res.json({ clips });
+  if (typeof title !== "string" || !title.trim()) {
+    return res.status(400).json({
+      message: "A title is required.",
+    });
+  }
+
+  const cleanedTitle = title.trim();
+
+  if (cleanedTitle.length > 100) {
+    return res.status(400).json({
+      message: "Title must be 100 characters or fewer.",
+    });
+  }
+
+  const { inputPath, metadataPath } = getJobPaths(jobId);
+
+  if (!fs.existsSync(inputPath)) {
+    return res.status(404).json({
+      message: "Job does not exist.",
+    });
+  }
+
+  const clips = getSavedClips(inputPath, metadataPath);
+
+  const clipIndex = clips.findIndex((clip) => clip.id === clipId);
+
+  if (clipIndex === -1) {
+    return res.status(404).json({
+      message: "Clip not found.",
+    });
+  }
+
+  clips[clipIndex] = {
+    ...clips[clipIndex],
+    title: cleanedTitle,
+  };
+
+  writeClipMetadata(metadataPath, clips);
+
+  return res.json({
+    message: "Clip title updated.",
+    ...clips[clipIndex],
+    videoUrl: `http://localhost:8000/jobs/${jobId}/clips/${clips[clipIndex].fileName}`,
+  });
 });
 
 router.get("/:jobId/clips/:fileName", (req, res) => {
@@ -140,16 +269,8 @@ router.get("/:jobId/clips/:fileName", (req, res) => {
     return res.status(400).json({ message: "Invalid file name." });
   }
 
-  const projectRoot = path.resolve(process.cwd(), "..");
-
-  const filePath = path.join(
-    projectRoot,
-    "storage",
-    "jobs",
-    jobId,
-    "input",
-    fileName,
-  );
+  const { inputPath } = getJobPaths(jobId);
+  const filePath = path.join(inputPath, fileName);
 
   if (!fs.existsSync(filePath)) {
     return res.status(404).json({ message: "Clip not found." });

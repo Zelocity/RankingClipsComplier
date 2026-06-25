@@ -1,5 +1,10 @@
 import { useEffect, useState } from "react";
-import { getClipsForJob, importClipFromUrl, type Clip } from "../api/clipApi";
+import {
+  getClipsForJob,
+  importClipFromUrl,
+  updateClipTitle,
+  type Clip,
+} from "../api/clipApi";
 
 export type Item = {
   slotId: string;
@@ -10,7 +15,7 @@ export type Item = {
 function createItemFromClip(clip: Clip, titleNumber: number): Item {
   return {
     slotId: clip.id,
-    title: `Untitled ${titleNumber}`,
+    title: clip.title || `Untitled ${titleNumber}`,
     videoUrl: clip.videoUrl,
   };
 }
@@ -51,6 +56,38 @@ export function useItemList(currentJobId: string | undefined) {
     };
   }, [currentJobId]);
 
+  async function handleUpdateItemTitle(slotId: string, newTitle: string) {
+    const trimmedTitle = newTitle.trim();
+
+    if (!trimmedTitle || !currentJobId) {
+      return;
+    }
+
+    try {
+      const updatedClip = await updateClipTitle(
+        currentJobId,
+        slotId,
+        trimmedTitle,
+      );
+
+      setItems((previousItems) =>
+        previousItems.map((item) =>
+          item.slotId === slotId ? { ...item, title: updatedClip.title } : item,
+        ),
+      );
+    } catch (error) {
+      console.error("Could not update clip title:", error);
+    }
+  }
+
+  function createItemFromClip(clip: Clip, titleNumber: number): Item {
+    return {
+      slotId: clip.id,
+      title: clip.title || `Untitled ${titleNumber}`,
+      videoUrl: clip.videoUrl,
+    };
+  }
+
   async function handleAddItem(jobId: string, url: string) {
     try {
       const result = await importClipFromUrl(jobId, url);
@@ -79,5 +116,6 @@ export function useItemList(currentJobId: string | undefined) {
     setItems,
     handleAddItem,
     handleDeleteItem,
+    handleUpdateItemTitle,
   };
 }
