@@ -69,3 +69,22 @@ export async function importClipFromUrl(
 
   return data;
 }
+
+export type CompileResponse = {
+  message: string;
+  videoUrl: string;
+};
+
+export async function compileJob(jobId: string): Promise<CompileResponse> {
+  const response = await fetch(`${API_URL}/compile/${jobId}`, {
+    method: "POST",
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.message || "Could not compile video.");
+  }
+
+  return data;
+}

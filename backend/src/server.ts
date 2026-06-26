@@ -21,6 +21,7 @@ app.get("/", (req, res) => {
 app.use("/compile", compileRoutes);
 app.use("/jobs", jobRoutes);
 app.use("/jobs", clipRoutes);
+app.use("/compile", compileRoutes);
 
 // Start server
 app.listen(PORT, () => {
