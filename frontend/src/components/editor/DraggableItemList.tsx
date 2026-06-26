@@ -10,12 +10,14 @@ type DraggableItemListProps = {
   items: Item[];
   onDeleteItem: (slotId: string) => void;
   onUpdateItemTitle: (slotId: string, newTitle: string) => void;
+  onOrderChange: (orderedItems: Item[]) => void;
 };
 
 function DraggableItemList({
   items,
   onDeleteItem,
   onUpdateItemTitle,
+  onOrderChange,
 }: DraggableItemListProps) {
   const [slotItemMap, setSlotItemMap] = useState<SlotItemMapArray>(
     utils.initSlotItemMap(items, "slotId"),
@@ -29,6 +31,12 @@ function DraggableItemList({
   const slottedItems = useMemo(() => {
     return utils.toSlottedItems(items, "slotId", slotItemMap);
   }, [items, slotItemMap]);
+
+  useEffect(() => {
+    const orderedItems = slottedItems.map(({ item }) => item);
+
+    onOrderChange(orderedItems);
+  }, [slottedItems, onOrderChange]);
 
   function handleToggleExpanded(slotId: string) {
     setExpandedItems((previousItems) => {

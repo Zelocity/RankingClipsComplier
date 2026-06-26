@@ -4,7 +4,9 @@ import { useParams } from "react-router-dom";
 import { compileJob } from "../api/clipApi";
 import DraggableItemList from "../components/editor/DraggableItemList";
 import SubmitUrlForm from "../components/editor/SubmitUrlForm";
-import { useItemList } from "../utils/listUtils";
+import { type Item, useItemList } from "../utils/listUtils";
+
+import LivePreview from "../components/editor/LivePreview";
 
 function EditorPage() {
   const { jobId } = useParams<{ jobId: string }>();
@@ -15,6 +17,7 @@ function EditorPage() {
   const [compiledVideoUrl, setCompiledVideoUrl] = useState<string | null>(null);
   const [isCompiling, setIsCompiling] = useState(false);
   const [compileError, setCompileError] = useState("");
+  const [previewItems, setPreviewItems] = useState<Item[]>([]);
 
   if (!jobId) {
     return <p>No job ID found.</p>;
@@ -28,6 +31,10 @@ function EditorPage() {
     try {
       setIsCompiling(true);
       setCompileError("");
+
+      if (!jobId) {
+        return <p>No job ID found.</p>;
+      }
 
       const result = await compileJob(jobId);
 
@@ -54,11 +61,12 @@ function EditorPage() {
           items={itemList}
           onDeleteItem={handleDeleteItem}
           onUpdateItemTitle={handleUpdateItemTitle}
+          onOrderChange={setPreviewItems}
         />
       </aside>
 
       <main className="flex flex-col items-center p-8">
-        <h2 className="mb-6 text-2xl font-bold">Compiled Video</h2>
+        <h2 className="mb-6 text-2xl font-bold">Live Preview</h2>
 
         <div className="flex min-h-[600px] w-full max-w-3xl items-center justify-center rounded-2xl border-2 border-dashed border-slate-600 bg-slate-900">
           {compiledVideoUrl ? (
@@ -69,8 +77,8 @@ function EditorPage() {
               className="aspect-[9/16] w-full max-w-[360px] rounded-xl bg-black object-contain"
             />
           ) : (
-            <div className="flex aspect-[9/16] w-full max-w-[360px] items-center justify-center rounded-xl bg-black text-slate-500">
-              Your compiled video will appear here.
+            <div className="flex min-h-[600px] w-full max-w-3xl items-center justify-center rounded-2xl border-2 border-dashed border-slate-600 bg-slate-900 p-6">
+              <LivePreview items={previewItems} />
             </div>
           )}
         </div>

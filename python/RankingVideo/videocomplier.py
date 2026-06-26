@@ -12,15 +12,15 @@ from moviepy import (
 
 VIDEO_EXTENSIONS = [".mp4", ".mov", ".mkv", ".webm"]
 
-TARGET_WIDTH = 1080
-TARGET_HEIGHT = 1920
+TARGET_WIDTH = 540
+TARGET_HEIGHT = 960
 
 RANKING_LABELS = [
-    "Stare",
-    "CRONCH",
-    "Glasses",
-    "Cute",
-    "bread cat",
+    "Stare 😀",
+    "CRONCH 😅",
+    "Glasses 😔",
+    "Cute 🥵",
+    "bread cat 😪",
 ]
 
 RANK_COLORS = [
@@ -36,6 +36,7 @@ def load_font(font_size: int):
     font_paths = [
         Path(r"C:\Windows\Fonts\arialbd.ttf"),
         Path(r"C:\Windows\Fonts\impact.ttf"),
+        Path(r"C:\Windows\Fonts\seguiemj.ttf"),
     ]
 
     for font_path in font_paths:
@@ -160,7 +161,7 @@ def create_ranking_overlay(width: int, height: int) -> np.ndarray:
         (0, 0, width, int(height * 0.16)),
         fill=(0, 0, 0, 180),
     )
-
+    
     draw_centered_segments(
         draw=draw,
         image_width=width,
