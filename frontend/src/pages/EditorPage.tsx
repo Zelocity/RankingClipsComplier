@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import RevealOrderPanel from "../components/editor/RevealOrderPanel";
 import { useParams } from "react-router-dom";
 
 import { compileJob } from "../api/clipApi";
@@ -18,9 +19,53 @@ function EditorPage() {
   const [isCompiling, setIsCompiling] = useState(false);
   const [compileError, setCompileError] = useState("");
   const [previewItems, setPreviewItems] = useState<Item[]>([]);
+  const [playOrder, setPlayOrder] = useState<string[]>([]);
 
   if (!jobId) {
     return <p>No job ID found.</p>;
+  }
+
+  useEffect(() => {
+    setPlayOrder((previousOrder) => {
+      const availableIds = new Set(previewItems.map((item) => item.slotId));
+
+      const keptIds = previousOrder.filter((slotId) =>
+        availableIds.has(slotId),
+      );
+
+      const keptIdSet = new Set(keptIds);
+
+      const newIds = previewItems
+        .map((item) => item.slotId)
+        .filter((slotId) => !keptIdSet.has(slotId));
+
+      const nextOrder = [...keptIds, ...newIds];
+
+      const didOrderChange =
+        nextOrder.length !== previousOrder.length ||
+        nextOrder.some((slotId, index) => slotId !== previousOrder[index]);
+
+      return didOrderChange ? nextOrder : previousOrder;
+    });
+  }, [previewItems]);
+
+  function handleMovePlayOrder(fromIndex: number, direction: -1 | 1) {
+    setPlayOrder((previousOrder) => {
+      const toIndex = fromIndex + direction;
+
+      if (toIndex < 0 || toIndex >= previousOrder.length) {
+        return previousOrder;
+      }
+
+      const nextOrder = [...previousOrder];
+
+      [nextOrder[fromIndex], nextOrder[toIndex]] = [
+        nextOrder[toIndex],
+        nextOrder[fromIndex],
+      ];
+
+      return nextOrder;
+    });
   }
 
   async function handleCompile() {
@@ -63,6 +108,11 @@ function EditorPage() {
           onUpdateItemTitle={handleUpdateItemTitle}
           onOrderChange={setPreviewItems}
         />
+        <RevealOrderPanel
+          items={previewItems}
+          playOrder={playOrder}
+          onMove={handleMovePlayOrder}
+        />
       </aside>
 
       <main className="flex flex-col items-center p-8">
@@ -78,7 +128,7 @@ function EditorPage() {
             />
           ) : (
             <div className="flex min-h-[600px] w-full max-w-3xl items-center justify-center rounded-2xl border-2 border-dashed border-slate-600 bg-slate-900 p-6">
-              <LivePreview items={previewItems} />
+              <LivePreview items={previewItems} playOrder={playOrder} />
             </div>
           )}
         </div>

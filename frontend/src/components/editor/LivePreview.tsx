@@ -1,34 +1,76 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { Item } from "../../utils/listUtils";
+import "./LivePreview.css";
 
 type LivePreviewProps = {
   items: Item[];
+  playOrder: string[];
 };
 
-function LivePreview({ items }: LivePreviewProps) {
+const TEMPLATE_TOPIC = "THE BEST MOMENTS";
+
+const rankStyles = [
+  "text-red-500",
+  "text-orange-400",
+  "text-yellow-300",
+  "text-slate-200",
+  "text-white",
+];
+
+function LivePreview({ items, playOrder }: LivePreviewProps) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
-  const [activeIndex, setActiveIndex] = useState(0);
+  const [activePlayIndex, setActivePlayIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [visibleTitleId, setVisibleTitleId] = useState<string | null>(null);
 
   const shouldAutoPlayNextRef = useRef(false);
 
-  const activeItem = items[activeIndex] ?? null;
-  const rankNumber = activeIndex + 1;
+  const resolvedPlayOrder = useMemo(() => {
+    const availableIds = new Set(items.map((item) => item.slotId));
+    const seenIds = new Set<string>();
+    const orderedIds: string[] = [];
+
+    for (const slotId of playOrder) {
+      if (availableIds.has(slotId) && !seenIds.has(slotId)) {
+        orderedIds.push(slotId);
+        seenIds.add(slotId);
+      }
+    }
+
+    for (const item of items) {
+      if (!seenIds.has(item.slotId)) {
+        orderedIds.push(item.slotId);
+      }
+    }
+
+    return orderedIds;
+  }, [items, playOrder]);
+
+  const activeItemId = resolvedPlayOrder[activePlayIndex] ?? null;
+
+  const activeItem = items.find((item) => item.slotId === activeItemId) ?? null;
+
+  const activeRankIndex = activeItem
+    ? items.findIndex((item) => item.slotId === activeItem.slotId)
+    : -1;
 
   useEffect(() => {
-    if (items.length === 0) {
-      setActiveIndex(0);
+    if (resolvedPlayOrder.length === 0) {
+      setActivePlayIndex(0);
       setIsPlaying(false);
+      setVisibleTitleId(null);
       return;
     }
 
-    setActiveIndex((previousIndex) =>
-      Math.min(previousIndex, items.length - 1),
+    setActivePlayIndex((previousIndex) =>
+      Math.min(previousIndex, resolvedPlayOrder.length - 1),
     );
-  }, [items.length]);
+  }, [resolvedPlayOrder.length]);
 
   useEffect(() => {
+    setVisibleTitleId(null);
+
     const video = videoRef.current;
 
     if (!video || !activeItem) {
@@ -48,28 +90,26 @@ function LivePreview({ items }: LivePreviewProps) {
     });
   }, [activeItem?.slotId]);
 
-  function changeClip(nextIndex: number) {
+  function changeClip(nextPlayIndex: number) {
+    if (nextPlayIndex < 0 || nextPlayIndex >= resolvedPlayOrder.length) {
+      return;
+    }
+
     const video = videoRef.current;
+
+    setVisibleTitleId(null);
 
     shouldAutoPlayNextRef.current = video ? !video.paused : false;
 
-    setActiveIndex(nextIndex);
+    setActivePlayIndex(nextPlayIndex);
   }
 
   function handlePrevious() {
-    if (activeIndex === 0) {
-      return;
-    }
-
-    changeClip(activeIndex - 1);
+    changeClip(activePlayIndex - 1);
   }
 
   function handleNext() {
-    if (activeIndex >= items.length - 1) {
-      return;
-    }
-
-    changeClip(activeIndex + 1);
+    changeClip(activePlayIndex + 1);
   }
 
   function handlePlayPause() {
@@ -93,18 +133,23 @@ function LivePreview({ items }: LivePreviewProps) {
       return;
     }
 
+    video.pause();
+    setVisibleTitleId(null);
     video.currentTime = 0;
+
     void video.play();
   }
 
   function handleVideoEnded() {
-    if (activeIndex >= items.length - 1) {
+    if (activePlayIndex >= resolvedPlayOrder.length - 1) {
       setIsPlaying(false);
       return;
     }
 
+    setVisibleTitleId(null);
     shouldAutoPlayNextRef.current = true;
-    setActiveIndex((previousIndex) => previousIndex + 1);
+
+    setActivePlayIndex((previousIndex) => previousIndex + 1);
   }
 
   if (!activeItem) {
@@ -125,23 +170,67 @@ function LivePreview({ items }: LivePreviewProps) {
           playsInline
           preload="metadata"
           onEnded={handleVideoEnded}
-          onPlay={() => setIsPlaying(true)}
+          onPlay={() => {
+            setIsPlaying(true);
+            setVisibleTitleId(activeItem.slotId);
+          }}
           onPause={() => setIsPlaying(false)}
           className="h-full w-full object-cover"
         />
 
-        <div className="pointer-events-none absolute inset-x-0 top-0 bg-gradient-to-b from-black/80 via-black/30 to-transparent px-5 pb-16 pt-5">
-          <p className="text-xs font-bold uppercase tracking-[0.25em] text-violet-300">
-            Rank #{rankNumber}
-          </p>
+        <div className="pointer-events-none absolute inset-0 overflow-hidden">
+          <div className="absolute inset-x-0 top-0 bg-gradient-to-b from-black/90 via-black/55 to-transparent px-4 pb-14 pt-4">
+            <p className="preview-outline text-center text-xl font-black uppercase leading-none text-white">
+              <span className="text-violet-400">RANKING</span> {TEMPLATE_TOPIC}
+            </p>
+          </div>
 
-          <h3 className="mt-2 text-xl font-black leading-tight text-white drop-shadow-lg">
-            {activeItem.title}
-          </h3>
-        </div>
+          <div className="absolute left-3 top-16 flex w-[88%] flex-col gap-1">
+            {items.map((item, rankIndex) => {
+              const isActiveRank = rankIndex === activeRankIndex;
 
-        <div className="pointer-events-none absolute bottom-4 left-4 rounded-lg bg-black/70 px-3 py-2 text-sm font-semibold text-white backdrop-blur-sm">
-          Clip {activeIndex + 1} of {items.length}
+              const wasRevealedEarlier = resolvedPlayOrder
+                .slice(0, activePlayIndex)
+                .includes(item.slotId);
+
+              const isCurrentTitle = visibleTitleId === item.slotId;
+
+              const shouldShowTitle = wasRevealedEarlier || isCurrentTitle;
+
+              const rankColor = rankStyles[rankIndex] ?? "text-white";
+
+              return (
+                <div
+                  key={item.slotId}
+                  className={`flex items-center gap-2 rounded-md px-1 py-0.5 ${
+                    isActiveRank ? "bg-black/40" : ""
+                  }`}
+                >
+                  <span
+                    className={`preview-outline min-w-8 text-3xl font-black italic leading-none ${rankColor}`}
+                  >
+                    {rankIndex + 1}.
+                  </span>
+
+                  {shouldShowTitle && (
+                    <span
+                      className={`preview-outline truncate text-sm font-black uppercase ${
+                        isCurrentTitle ? "preview-title-slide" : ""
+                      } ${isActiveRank ? "text-white" : "text-slate-200"}`}
+                    >
+                      {item.title}
+                    </span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          {/* <div className="absolute bottom-4 left-4">
+            <p className="preview-outline text-6xl font-black italic leading-none text-white">
+              #{activeRankIndex + 1}
+            </p>
+          </div> */}
         </div>
       </div>
 
@@ -149,7 +238,7 @@ function LivePreview({ items }: LivePreviewProps) {
         <button
           type="button"
           onClick={handlePrevious}
-          disabled={activeIndex === 0}
+          disabled={activePlayIndex === 0}
           className="rounded-lg bg-slate-700 px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-slate-600 disabled:cursor-not-allowed disabled:opacity-40"
         >
           Previous
@@ -166,7 +255,7 @@ function LivePreview({ items }: LivePreviewProps) {
         <button
           type="button"
           onClick={handleNext}
-          disabled={activeIndex >= items.length - 1}
+          disabled={activePlayIndex >= resolvedPlayOrder.length - 1}
           className="rounded-lg bg-slate-700 px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-slate-600 disabled:cursor-not-allowed disabled:opacity-40"
         >
           Next

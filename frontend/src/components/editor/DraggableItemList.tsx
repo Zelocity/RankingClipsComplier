@@ -33,10 +33,26 @@ function DraggableItemList({
   }, [items, slotItemMap]);
 
   useEffect(() => {
-    const orderedItems = slottedItems.map(({ item }) => item);
+    const validItems = items.filter((item): item is Item =>
+      Boolean(item && typeof item.slotId === "string"),
+    );
 
-    onOrderChange(orderedItems);
-  }, [slottedItems, onOrderChange]);
+    const slottedOrder = slottedItems.flatMap((slottedItem) => {
+      const item = slottedItem?.item;
+
+      return item ? [item] : [];
+    });
+
+    const orderedIds = new Set(slottedOrder.map((item) => item.slotId));
+
+    // During a Swapy update, a newly added item may briefly be absent
+    // from slottedItems. Keep it at the end instead of losing it.
+    const missingItems = validItems.filter(
+      (item) => !orderedIds.has(item.slotId),
+    );
+
+    onOrderChange([...slottedOrder, ...missingItems]);
+  }, [items, slottedItems, onOrderChange]);
 
   function handleToggleExpanded(slotId: string) {
     setExpandedItems((previousItems) => {
