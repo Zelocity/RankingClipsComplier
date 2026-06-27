@@ -36,7 +36,7 @@ function RevealOrderPanel({ items, playOrder, onMove }: RevealOrderPanelProps) {
 
   return (
     <section className="mt-6 border-t border-slate-700 pt-5">
-      <h3 className="text-lg font-bold text-white">Play & Reveal Order</h3>
+      <h2 className="text-lg font-bold text-white">Play & Reveal Order</h2>
 
       <p className="mt-1 text-sm text-slate-400">
         Move ranks up or down to choose which clip plays and reveals next.

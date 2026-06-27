@@ -5,9 +5,8 @@ import "./LivePreview.css";
 type LivePreviewProps = {
   items: Item[];
   playOrder: string[];
+  videoTitle: string;
 };
-
-const TEMPLATE_TOPIC = "THE BEST MOMENTS";
 
 const rankStyles = [
   "text-red-500",
@@ -17,7 +16,7 @@ const rankStyles = [
   "text-white",
 ];
 
-function LivePreview({ items, playOrder }: LivePreviewProps) {
+function LivePreview({ items, playOrder, videoTitle }: LivePreviewProps) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
   const [activePlayIndex, setActivePlayIndex] = useState(0);
@@ -181,7 +180,7 @@ function LivePreview({ items, playOrder }: LivePreviewProps) {
         <div className="pointer-events-none absolute inset-0 overflow-hidden">
           <div className="absolute inset-x-0 top-0 bg-gradient-to-b from-black/90 via-black/55 to-transparent px-4 pb-14 pt-4">
             <p className="preview-outline text-center text-xl font-black uppercase leading-none text-white">
-              <span className="text-violet-400">RANKING</span> {TEMPLATE_TOPIC}
+              {videoTitle}
             </p>
           </div>
 
