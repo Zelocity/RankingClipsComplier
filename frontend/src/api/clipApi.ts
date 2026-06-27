@@ -1,4 +1,5 @@
 const API_URL = "http://localhost:8000";
+import type { TitleDocument } from "../utils/titleDocument";
 
 export type Clip = {
   id: string;
@@ -76,9 +77,22 @@ export type CompileResponse = {
   downloadUrl: string;
 };
 
-export async function compileJob(jobId: string): Promise<CompileResponse> {
+export type CompileSettings = {
+  titleDocument: TitleDocument;
+  rankedClipIds: string[];
+  playOrder: string[];
+};
+
+export async function compileJob(
+  jobId: string,
+  settings: CompileSettings,
+): Promise<CompileResponse> {
   const response = await fetch(`${API_URL}/compile/${jobId}`, {
     method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(settings),
   });
 
   const data = await response.json();

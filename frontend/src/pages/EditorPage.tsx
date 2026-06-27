@@ -79,11 +79,19 @@ function EditorPage() {
       return;
     }
 
+    const rankedItems = previewItems.length > 0 ? previewItems : itemList;
+
     try {
       setIsCompiling(true);
       setCompileError("");
+      setCompiledVideoUrl(null);
+      setDownloadUrl(null);
 
-      const result = await compileJob(jobId);
+      const result = await compileJob(jobId, {
+        titleDocument,
+        rankedClipIds: rankedItems.map((item) => item.slotId),
+        playOrder,
+      });
 
       setCompiledVideoUrl(`${result.videoUrl}?v=${Date.now()}`);
       setDownloadUrl(result.downloadUrl);
