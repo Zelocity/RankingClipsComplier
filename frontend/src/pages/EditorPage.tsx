@@ -5,9 +5,9 @@ import RevealOrderPanel from "../components/editor/RevealOrderPanel";
 import LivePreview from "../components/editor/LivePreview";
 import VideoTitleEditor from "../components/editor/VideoTitleEditor";
 import {
-  createDefaultTitleSegments,
-  type TitleSegment,
-} from "../utils/titleUtils";
+  createDefaultTitleDocument,
+  type TitleDocument,
+} from "../utils/titleDocument";
 import { compileJob } from "../api/clipApi";
 import DraggableItemList from "../components/editor/DraggableItemList";
 import SubmitUrlForm from "../components/editor/SubmitUrlForm";
@@ -25,9 +25,8 @@ function EditorPage() {
 
   const [previewItems, setPreviewItems] = useState<Item[]>([]);
   const [playOrder, setPlayOrder] = useState<string[]>([]);
-
-  const [titleSegments, setTitleSegments] = useState<TitleSegment[]>(
-    createDefaultTitleSegments,
+  const [titleDocument, setTitleDocument] = useState<TitleDocument>(
+    createDefaultTitleDocument,
   );
 
   useEffect(() => {
@@ -102,10 +101,7 @@ function EditorPage() {
   return (
     <div className="grid min-h-screen grid-cols-[800px_minmax(0,1fr)] bg-slate-950 text-white">
       <aside className="overflow-y-auto border-r border-slate-700 bg-slate-900 p-5">
-        <VideoTitleEditor
-          segments={titleSegments}
-          onChange={setTitleSegments}
-        />
+        <VideoTitleEditor content={titleDocument} onChange={setTitleDocument} />
 
         <h2 className="mb-5 text-xl font-bold">Video Clips</h2>
 
@@ -141,7 +137,7 @@ function EditorPage() {
               <LivePreview
                 items={previewItems}
                 playOrder={playOrder}
-                titleSegments={titleSegments}
+                titleDocument={titleDocument}
               />
             </div>
           )}
