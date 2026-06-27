@@ -73,6 +73,7 @@ export async function importClipFromUrl(
 export type CompileResponse = {
   message: string;
   videoUrl: string;
+  downloadUrl: string;
 };
 
 export async function compileJob(jobId: string): Promise<CompileResponse> {

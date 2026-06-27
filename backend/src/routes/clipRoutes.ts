@@ -279,6 +279,41 @@ router.get("/:jobId/clips/:fileName", (req, res) => {
   return res.sendFile(filePath);
 });
 
+router.get("/:jobId/output/:fileName/download", (req, res) => {
+  const { jobId, fileName } = req.params;
+
+  if (!isValidJobId(jobId)) {
+    return res.status(400).json({
+      message: "Invalid job ID.",
+    });
+  }
+
+  if (!isValidFileName(fileName)) {
+    return res.status(400).json({
+      message: "Invalid output file name.",
+    });
+  }
+
+  const projectRoot = path.resolve(process.cwd(), "..");
+
+  const filePath = path.join(
+    projectRoot,
+    "storage",
+    "jobs",
+    jobId,
+    "output",
+    fileName,
+  );
+
+  if (!fs.existsSync(filePath)) {
+    return res.status(404).json({
+      message: "Compiled video not found.",
+    });
+  }
+
+  return res.download(filePath, fileName);
+});
+
 router.get("/:jobId/output/:fileName", (req, res) => {
   const { jobId, fileName } = req.params;
 

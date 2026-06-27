@@ -12,7 +12,6 @@ import { compileJob } from "../api/clipApi";
 import DraggableItemList from "../components/editor/DraggableItemList";
 import SubmitUrlForm from "../components/editor/SubmitUrlForm";
 import { type Item, useItemList } from "../utils/listUtils";
-
 function EditorPage() {
   const { jobId } = useParams<{ jobId: string }>();
 
@@ -20,11 +19,14 @@ function EditorPage() {
     useItemList(jobId);
 
   const [compiledVideoUrl, setCompiledVideoUrl] = useState<string | null>(null);
+  const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
+
   const [isCompiling, setIsCompiling] = useState(false);
   const [compileError, setCompileError] = useState("");
 
   const [previewItems, setPreviewItems] = useState<Item[]>([]);
   const [playOrder, setPlayOrder] = useState<string[]>([]);
+
   const [titleDocument, setTitleDocument] = useState<TitleDocument>(
     createDefaultTitleDocument,
   );
@@ -84,6 +86,7 @@ function EditorPage() {
       const result = await compileJob(jobId);
 
       setCompiledVideoUrl(`${result.videoUrl}?v=${Date.now()}`);
+      setDownloadUrl(result.downloadUrl);
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Could not compile video.";
@@ -156,13 +159,12 @@ function EditorPage() {
           <p className="mt-3 text-sm text-red-400">{compileError}</p>
         )}
 
-        {compiledVideoUrl && (
+        {downloadUrl && (
           <a
-            href={compiledVideoUrl}
-            download="compiled_video.mp4"
-            className="mt-4 text-sm font-medium text-violet-300 hover:text-violet-200"
+            href={downloadUrl}
+            className="mt-4 rounded-lg bg-emerald-600 px-5 py-3 font-semibold text-white transition-colors hover:bg-emerald-500"
           >
-            Download Video
+            Download Export
           </a>
         )}
       </main>

@@ -128,6 +128,7 @@ router.post("/:jobId", (req, res) => {
     return sendResponse(200, {
       message: "Videos compiled successfully.",
       videoUrl: `http://localhost:8000/jobs/${jobId}/output/${compiledFileName}`,
+      downloadUrl: `http://localhost:8000/jobs/${jobId}/output/${compiledFileName}/download`,
     });
   });
 });
