@@ -3,6 +3,11 @@ import { useParams } from "react-router-dom";
 
 import RevealOrderPanel from "../components/editor/RevealOrderPanel";
 import LivePreview from "../components/editor/LivePreview";
+import VideoTitleEditor from "../components/editor/VideoTitleEditor";
+import {
+  createDefaultTitleSegments,
+  type TitleSegment,
+} from "../utils/titleUtils";
 import { compileJob } from "../api/clipApi";
 import DraggableItemList from "../components/editor/DraggableItemList";
 import SubmitUrlForm from "../components/editor/SubmitUrlForm";
@@ -21,11 +26,9 @@ function EditorPage() {
   const [previewItems, setPreviewItems] = useState<Item[]>([]);
   const [playOrder, setPlayOrder] = useState<string[]>([]);
 
-  // Applied title currently shown in the preview.
-  const [videoTitle, setVideoTitle] = useState("RANKING THE BEST MOMENTS");
-
-  // What the user is currently typing.
-  const [draftVideoTitle, setDraftVideoTitle] = useState("");
+  const [titleSegments, setTitleSegments] = useState<TitleSegment[]>(
+    createDefaultTitleSegments,
+  );
 
   useEffect(() => {
     setPlayOrder((previousOrder) => {
@@ -50,18 +53,6 @@ function EditorPage() {
       return didOrderChange ? nextOrder : previousOrder;
     });
   }, [previewItems]);
-
-  function handleApplyVideoTitle(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-
-    const cleanedTitle = draftVideoTitle.trim();
-
-    if (!cleanedTitle) {
-      return;
-    }
-
-    setVideoTitle(cleanedTitle);
-  }
 
   function handleMovePlayOrder(fromIndex: number, direction: -1 | 1) {
     setPlayOrder((previousOrder) => {
@@ -111,35 +102,10 @@ function EditorPage() {
   return (
     <div className="grid min-h-screen grid-cols-[800px_minmax(0,1fr)] bg-slate-950 text-white">
       <aside className="overflow-y-auto border-r border-slate-700 bg-slate-900 p-5">
-        <section className="mb-6 border-b border-slate-700 pb-5">
-          <h2 className="text-lg font-bold text-white">Video Title</h2>
-
-          <p className="mt-1 pb-2 text-sm text-slate-400">
-            Name for the whole ranking video.
-          </p>
-
-          <form
-            onSubmit={handleApplyVideoTitle}
-            className="flex flex-col gap-3"
-          >
-            <input
-              type="text"
-              value={draftVideoTitle}
-              onChange={(event) => setDraftVideoTitle(event.target.value)}
-              data-swapy-no-drag
-              placeholder="Ranking The Best Moments"
-              className="rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-lg text-white outline-none placeholder:text-slate-500 focus:border-violet-400"
-            />
-
-            <button
-              type="submit"
-              data-swapy-no-drag
-              className="w-fit rounded-lg bg-violet-600 px-4 py-2 font-medium text-white transition-colors hover:bg-violet-500"
-            >
-              Apply Title
-            </button>
-          </form>
-        </section>
+        <VideoTitleEditor
+          segments={titleSegments}
+          onChange={setTitleSegments}
+        />
 
         <h2 className="mb-5 text-xl font-bold">Video Clips</h2>
 
@@ -175,7 +141,7 @@ function EditorPage() {
               <LivePreview
                 items={previewItems}
                 playOrder={playOrder}
-                videoTitle={videoTitle}
+                titleSegments={titleSegments}
               />
             </div>
           )}

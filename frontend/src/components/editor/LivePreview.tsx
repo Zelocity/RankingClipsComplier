@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import type { TitleSegment } from "../../utils/titleUtils";
 import type { Item } from "../../utils/listUtils";
 import "./LivePreview.css";
 
 type LivePreviewProps = {
   items: Item[];
   playOrder: string[];
-  videoTitle: string;
+  titleSegments: TitleSegment[];
 };
 
 const rankStyles = [
@@ -16,7 +17,7 @@ const rankStyles = [
   "text-white",
 ];
 
-function LivePreview({ items, playOrder, videoTitle }: LivePreviewProps) {
+function LivePreview({ items, playOrder, titleSegments }: LivePreviewProps) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
   const [activePlayIndex, setActivePlayIndex] = useState(0);
@@ -178,11 +179,13 @@ function LivePreview({ items, playOrder, videoTitle }: LivePreviewProps) {
         />
 
         <div className="pointer-events-none absolute inset-0 overflow-hidden">
-          <div className="absolute inset-x-0 top-0 bg-gradient-to-b from-black/90 via-black/55 to-transparent px-4 pb-14 pt-4">
-            <p className="preview-outline text-center text-xl font-black uppercase leading-none text-white">
-              {videoTitle}
-            </p>
-          </div>
+          <p className="preview-outline text-center text-xl font-black uppercase leading-none text-white">
+            {titleSegments.map((segment) => (
+              <span key={segment.id} style={{ color: segment.color }}>
+                {segment.text}
+              </span>
+            ))}
+          </p>
 
           <div className="absolute left-3 top-16 flex w-[88%] flex-col gap-1">
             {items.map((item, rankIndex) => {
