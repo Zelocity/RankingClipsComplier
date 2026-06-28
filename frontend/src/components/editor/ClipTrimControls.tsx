@@ -1,11 +1,17 @@
-import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type PointerEvent as ReactPointerEvent,
+  type RefObject,
+} from "react";
 
 import type { Item } from "../../utils/listUtils";
 
-import "./ClipTrimControls.css";
-
-// const DEFAULT_CLIP_LENGTH = 8;
 const MINIMUM_CLIP_LENGTH = 0.25;
+
+type DragHandle = "start" | "end" | null;
 
 type ClipTrimControlsProps = {
   item: Item;
@@ -27,14 +33,10 @@ function formatTime(seconds: number): string {
     return "0:00.0";
   }
 
-  const wholeMinutes = Math.floor(seconds / 60);
-  const remainingSeconds = seconds - wholeMinutes * 60;
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = seconds - minutes * 60;
 
-  return `${wholeMinutes}:${remainingSeconds.toFixed(1).padStart(4, "0")}`;
-}
-
-function getDefaultTrimEnd(duration: number): number {
-  return duration;
+  return `${minutes}:${remainingSeconds.toFixed(1).padStart(4, "0")}`;
 }
 
 function ClipTrimControls({
@@ -59,7 +61,8 @@ function ClipTrimControls({
 
     const start = clamp(item.trimStart, 0, maximumStart);
 
-    const requestedEnd = item.trimEnd ?? getDefaultTrimEnd(safeDuration);
+    // null means use the entire video.
+    const requestedEnd = item.trimEnd ?? safeDuration;
 
     const end = clamp(
       requestedEnd,
@@ -67,19 +70,28 @@ function ClipTrimControls({
       safeDuration,
     );
 
-    return {
-      start,
-      end,
-    };
-  }, [item.slotId, item.trimStart, item.trimEnd, minimumGap, safeDuration]);
+    return { start, end };
+  }, [item.slotId, item.trimStart, item.trimEnd, safeDuration, minimumGap]);
 
   const [trimStart, setTrimStart] = useState(initialValues.start);
   const [trimEnd, setTrimEnd] = useState(initialValues.end);
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
+  const [draggingHandle, setDraggingHandle] = useState<DragHandle>(null);
+
+  const trackRef = useRef<HTMLDivElement | null>(null);
 
   const trimValuesRef = useRef(initialValues);
   const lastSavedRef = useRef(initialValues);
+  const draggingHandleRef = useRef<DragHandle>(null);
+
+  useEffect(() => {
+    setTrimStart(initialValues.start);
+    setTrimEnd(initialValues.end);
+
+    trimValuesRef.current = initialValues;
+    lastSavedRef.current = initialValues;
+  }, [initialValues]);
 
   useEffect(() => {
     const videoElement = videoRef.current;
@@ -88,21 +100,19 @@ function ClipTrimControls({
       return;
     }
 
-    const activeVideo: HTMLVideoElement = videoElement;
-
     function stopAtTrimEnd() {
       const { start, end } = trimValuesRef.current;
 
-      if (activeVideo.currentTime >= end) {
-        activeVideo.pause();
-        activeVideo.currentTime = start;
+      if (videoElement.currentTime >= end) {
+        videoElement.pause();
+        videoElement.currentTime = start;
       }
     }
 
-    activeVideo.addEventListener("timeupdate", stopAtTrimEnd);
+    videoElement.addEventListener("timeupdate", stopAtTrimEnd);
 
     return () => {
-      activeVideo.removeEventListener("timeupdate", stopAtTrimEnd);
+      videoElement.removeEventListener("timeupdate", stopAtTrimEnd);
     };
   }, [safeDuration, videoRef]);
 
@@ -113,9 +123,7 @@ function ClipTrimControls({
       return;
     }
 
-    const activeVideo: HTMLVideoElement = videoElement;
-
-    activeVideo.currentTime = time;
+    videoElement.currentTime = time;
   }
 
   function setStart(nextStart: number) {
@@ -125,15 +133,12 @@ function ClipTrimControls({
 
     const { end } = trimValuesRef.current;
 
-    const nextValue = clamp(nextStart, 0, Math.max(0, end - minimumGap));
+    const start = clamp(nextStart, 0, Math.max(0, end - minimumGap));
 
-    trimValuesRef.current = {
-      start: nextValue,
-      end,
-    };
+    trimValuesRef.current = { start, end };
 
-    setTrimStart(nextValue);
-    seekVideo(nextValue);
+    setTrimStart(start);
+    seekVideo(start);
   }
 
   function setEnd(nextEnd: number) {
@@ -143,19 +148,16 @@ function ClipTrimControls({
 
     const { start } = trimValuesRef.current;
 
-    const nextValue = clamp(
+    const end = clamp(
       nextEnd,
       Math.min(safeDuration, start + minimumGap),
       safeDuration,
     );
 
-    trimValuesRef.current = {
-      start,
-      end: nextValue,
-    };
+    trimValuesRef.current = { start, end };
 
-    setTrimEnd(nextValue);
-    seekVideo(nextValue);
+    setTrimEnd(end);
+    seekVideo(end);
   }
 
   async function saveTrim() {
@@ -180,31 +182,114 @@ function ClipTrimControls({
 
       await onUpdateItemTrim(item.slotId, start, end);
 
-      lastSavedRef.current = {
-        start,
-        end,
-      };
+      lastSavedRef.current = { start, end };
     } catch (error) {
-      const message =
+      setSaveError(
         error instanceof Error
           ? error.message
-          : "Could not save trim settings.";
-
-      setSaveError(message);
+          : "Could not save trim settings.",
+      );
     } finally {
       setIsSaving(false);
     }
   }
 
-  function handlePreviewSelection() {
-    const video = videoRef.current;
+  function getTimeFromPointer(clientX: number): number | null {
+    const track = trackRef.current;
 
-    if (!video) {
+    if (track === null || safeDuration <= 0) {
+      return null;
+    }
+
+    const rect = track.getBoundingClientRect();
+
+    if (rect.width <= 0) {
+      return null;
+    }
+
+    const percent = clamp((clientX - rect.left) / rect.width, 0, 1);
+
+    return percent * safeDuration;
+  }
+
+  function updateHandleFromPointer(
+    handle: Exclude<DragHandle, null>,
+    clientX: number,
+  ) {
+    const time = getTimeFromPointer(clientX);
+
+    if (time === null) {
       return;
     }
 
-    video.currentTime = trimValuesRef.current.start;
-    void video.play();
+    if (handle === "start") {
+      setStart(time);
+    } else {
+      setEnd(time);
+    }
+  }
+
+  function handlePointerDown(
+    handle: Exclude<DragHandle, null>,
+    event: ReactPointerEvent<HTMLButtonElement>,
+  ) {
+    event.preventDefault();
+    event.stopPropagation();
+
+    draggingHandleRef.current = handle;
+    setDraggingHandle(handle);
+
+    event.currentTarget.setPointerCapture(event.pointerId);
+
+    updateHandleFromPointer(handle, event.clientX);
+  }
+
+  function handlePointerMove(
+    handle: Exclude<DragHandle, null>,
+    event: ReactPointerEvent<HTMLButtonElement>,
+  ) {
+    if (draggingHandleRef.current !== handle) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    updateHandleFromPointer(handle, event.clientX);
+  }
+
+  function handlePointerUp(
+    handle: Exclude<DragHandle, null>,
+    event: ReactPointerEvent<HTMLButtonElement>,
+  ) {
+    if (draggingHandleRef.current !== handle) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    updateHandleFromPointer(handle, event.clientX);
+
+    draggingHandleRef.current = null;
+    setDraggingHandle(null);
+
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+
+    void saveTrim();
+  }
+
+  function handlePreviewSelection() {
+    const videoElement = videoRef.current;
+
+    if (videoElement === null) {
+      return;
+    }
+
+    videoElement.currentTime = trimValuesRef.current.start;
+    void videoElement.play();
   }
 
   async function handleReset() {
@@ -214,7 +299,7 @@ function ClipTrimControls({
 
     const resetValues = {
       start: 0,
-      end: getDefaultTrimEnd(safeDuration),
+      end: safeDuration,
     };
 
     trimValuesRef.current = resetValues;
@@ -231,12 +316,11 @@ function ClipTrimControls({
 
       lastSavedRef.current = resetValues;
     } catch (error) {
-      const message =
+      setSaveError(
         error instanceof Error
           ? error.message
-          : "Could not reset trim settings.";
-
-      setSaveError(message);
+          : "Could not reset trim settings.",
+      );
     } finally {
       setIsSaving(false);
     }
@@ -253,9 +337,6 @@ function ClipTrimControls({
   const startPercent = (trimStart / safeDuration) * 100;
   const endPercent = (trimEnd / safeDuration) * 100;
 
-  const maximumStart = Math.max(0, trimEnd - minimumGap);
-  const minimumEnd = Math.min(safeDuration, trimStart + minimumGap);
-
   return (
     <section
       data-swapy-no-drag
@@ -269,7 +350,12 @@ function ClipTrimControls({
         </span>
       </div>
 
-      <div className="relative h-8">
+      <div
+        ref={trackRef}
+        data-swapy-no-drag
+        className="relative h-10 select-none touch-none"
+        onPointerDown={(event) => event.stopPropagation()}
+      >
         <div className="absolute left-0 right-0 top-1/2 h-2 -translate-y-1/2 rounded-full bg-slate-700" />
 
         <div
@@ -280,38 +366,37 @@ function ClipTrimControls({
           }}
         />
 
-        <input
-          type="range"
-          min={0}
-          max={maximumStart}
-          step={0.05}
-          value={trimStart}
-          onPointerDown={(event) => event.stopPropagation()}
-          onChange={(event) => setStart(Number(event.target.value))}
-          onPointerUp={() => void saveTrim()}
-          onBlur={() => void saveTrim()}
-          aria-label="Clip start time"
-          className="trim-range trim-range-start"
+        <button
+          type="button"
+          aria-label="Drag clip start time"
+          className={`absolute top-1/2 z-30 h-5 w-5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-violet-500 shadow-lg transition-transform hover:scale-110 ${
+            draggingHandle === "start" ? "scale-125" : ""
+          }`}
+          style={{ left: `${startPercent}%` }}
+          onPointerDown={(event) => handlePointerDown("start", event)}
+          onPointerMove={(event) => handlePointerMove("start", event)}
+          onPointerUp={(event) => handlePointerUp("start", event)}
+          onPointerCancel={(event) => handlePointerUp("start", event)}
         />
 
-        <input
-          type="range"
-          min={minimumEnd}
-          max={safeDuration}
-          step={0.05}
-          value={trimEnd}
-          onPointerDown={(event) => event.stopPropagation()}
-          onChange={(event) => setEnd(Number(event.target.value))}
-          onPointerUp={() => void saveTrim()}
-          onBlur={() => void saveTrim()}
-          aria-label="Clip end time"
-          className="trim-range trim-range-end"
+        <button
+          type="button"
+          aria-label="Drag clip end time"
+          className={`absolute top-1/2 z-30 h-5 w-5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-violet-500 shadow-lg transition-transform hover:scale-110 ${
+            draggingHandle === "end" ? "scale-125" : ""
+          }`}
+          style={{ left: `${endPercent}%` }}
+          onPointerDown={(event) => handlePointerDown("end", event)}
+          onPointerMove={(event) => handlePointerMove("end", event)}
+          onPointerUp={(event) => handlePointerUp("end", event)}
+          onPointerCancel={(event) => handlePointerUp("end", event)}
         />
       </div>
 
       <div className="mt-2 flex items-center justify-between gap-2">
         <button
           type="button"
+          onPointerDown={(event) => event.stopPropagation()}
           onClick={handlePreviewSelection}
           className="rounded-md bg-violet-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-violet-500"
         >
@@ -320,6 +405,7 @@ function ClipTrimControls({
 
         <button
           type="button"
+          onPointerDown={(event) => event.stopPropagation()}
           onClick={() => void handleReset()}
           disabled={isSaving}
           className="rounded-md px-3 py-1.5 text-xs font-medium text-slate-300 transition hover:bg-slate-800 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"

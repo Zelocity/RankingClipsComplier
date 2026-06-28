@@ -12,10 +12,7 @@ type ClipCardProps = {
   onToggleExpanded: (slotId: string) => void;
   onDeleteItem: (slotId: string) => void | Promise<void>;
   onDragHandlePointerDown: () => void;
-  onUpdateItemTitle: (
-    slotId: string,
-    newTitle: string,
-  ) => void | Promise<void>;
+  onUpdateItemTitle: (slotId: string, newTitle: string) => void | Promise<void>;
   onUpdateItemTrim: (
     slotId: string,
     trimStart: number,
@@ -96,32 +93,23 @@ function ClipCard({
         <div className="grid grid-cols-[300px_minmax(0,1fr)] border-t border-slate-700 bg-slate-800 text-white">
           <aside
             data-swapy-no-drag
-            className="flex flex-col justify-center border-r border-dashed border-slate-600 p-4"
+            className="flex items-center justify-center border-r border-dashed border-slate-600 p-4"
           >
             {item.videoUrl ? (
-              <>
-                <video
-                  ref={videoRef}
-                  className="aspect-[9/16] w-full max-w-[280px] rounded-lg bg-black object-contain"
-                  src={item.videoUrl}
-                  controls
-                  data-swapy-no-drag
-                  onLoadedMetadata={(event) => {
-                    const duration = event.currentTarget.duration;
+              <video
+                ref={videoRef}
+                className="aspect-[9/16] w-full max-w-[280px] rounded-lg bg-black object-contain"
+                src={item.videoUrl}
+                controls
+                data-swapy-no-drag
+                onLoadedMetadata={(event) => {
+                  const duration = event.currentTarget.duration;
 
-                    if (Number.isFinite(duration) && duration > 0) {
-                      setVideoDuration(duration);
-                    }
-                  }}
-                />
-
-                <ClipTrimControls
-                  item={item}
-                  duration={videoDuration}
-                  videoRef={videoRef}
-                  onUpdateItemTrim={onUpdateItemTrim}
-                />
-              </>
+                  if (Number.isFinite(duration) && duration > 0) {
+                    setVideoDuration(duration);
+                  }
+                }}
+              />
             ) : (
               <p className="text-sm text-slate-400">No video URL yet.</p>
             )}
@@ -130,9 +118,13 @@ function ClipCard({
           <main className="p-5">
             <h3 className="pb-3 text-lg font-semibold">Clip Settings</h3>
 
-            <ClipSetting
+            <ClipSetting item={item} onUpdateItemTitle={onUpdateItemTitle} />
+
+            <ClipTrimControls
               item={item}
-              onUpdateItemTitle={onUpdateItemTitle}
+              duration={videoDuration}
+              videoRef={videoRef}
+              onUpdateItemTrim={onUpdateItemTrim}
             />
           </main>
         </div>

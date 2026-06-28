@@ -1,67 +1,92 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useState } from "react";
+
 import type { Item } from "../../utils/listUtils";
 
 type ClipSettingProps = {
   item: Item;
-  onUpdateItemTitle: (slotId: string, newTitle: string) => void;
+  onUpdateItemTitle: (slotId: string, newTitle: string) => void | Promise<void>;
 };
 
 function ClipSetting({ item, onUpdateItemTitle }: ClipSettingProps) {
   const [draftTitle, setDraftTitle] = useState(item.title);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
 
   useEffect(() => {
     setDraftTitle(item.title);
-  }, [item.title]);
+  }, [item.slotId, item.title]);
 
-  function handleSubmit(event: FormEvent) {
-    event.preventDefault();
-
+  async function handleApplyTitle() {
     const cleanedTitle = draftTitle.trim();
 
-    if (!cleanedTitle) {
+    if (!cleanedTitle || isSaving) {
       return;
     }
 
-    onUpdateItemTitle(item.slotId, cleanedTitle);
+    try {
+      setIsSaving(true);
+      setSaveError("");
+
+      await onUpdateItemTitle(item.slotId, cleanedTitle);
+    } catch (error) {
+      setSaveError(
+        error instanceof Error ? error.message : "Could not save clip title.",
+      );
+    } finally {
+      setIsSaving(false);
+    }
   }
 
+  const didTitleChange = draftTitle.trim() !== item.title;
+
   return (
-    <div>
-      {/* <div className="bg-amber-600"> */}
+    <section
+      data-swapy-no-drag
+      className="mt-3 rounded-lg border border-slate-700 bg-slate-900 p-3"
+    >
+      <div className="mb-2 flex items-center justify-between gap-3">
+        <h4 className="text-sm font-semibold text-slate-100">Clip Title</h4>
 
-      <form onSubmit={handleSubmit} className="flex flex-col gap-3">
-        <input
-          type="text"
-          value={draftTitle}
-          onChange={(event) => setDraftTitle(event.target.value)}
-          data-swapy-no-drag
-          placeholder="Untitled clip"
-          className="rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 text-lg text-white outline-none placeholder:text-slate-500 focus:border-violet-400"
-        />
+        <span className="text-xs text-slate-400">
+          {draftTitle.trim().length}/100
+        </span>
+      </div>
+
+      <input
+        type="text"
+        value={draftTitle}
+        maxLength={100}
+        onPointerDown={(event) => event.stopPropagation()}
+        onChange={(event) => setDraftTitle(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            void handleApplyTitle();
+          }
+        }}
+        className="w-full rounded-md border border-slate-600 bg-slate-800 px-3 py-2 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-violet-500 focus:ring-2 focus:ring-violet-500/30"
+        placeholder="Enter clip title"
+      />
+
+      <div className="mt-2 flex items-center justify-between gap-2">
+        <p className="text-xs text-slate-400">
+          This title appears in the ranking list.
+        </p>
+
         <button
-          type="submit"
-          data-swapy-no-drag
-          className="w-fit rounded-lg bg-violet-600 px-4 py-2 font-medium text-white transition-colors hover:bg-violet-500"
+          type="button"
+          onPointerDown={(event) => event.stopPropagation()}
+          onClick={() => void handleApplyTitle()}
+          disabled={!draftTitle.trim() || !didTitleChange || isSaving}
+          className="rounded-md bg-violet-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-violet-500 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          Apply Title
+          {isSaving ? "Saving..." : "Apply Changes"}
         </button>
-      </form>
+      </div>
 
-      {/* <div className="">
-        <button type="submit">
-          <p className="font-bold bg-slate-500 rounded-2xl">font</p>
-        </button>
-        <button type="submit">
-          <p className="font-bold bg-slate-500 rounded-2xl">emote</p>
-        </button>
-        <button type="submit">
-          <p className="font-bold bg-slate-500 rounded-2xl">align</p>
-        </button>
-        <button type="submit">
-          <p className="font-bold bg-slate-500 rounded-2xl">size</p>
-        </button>
-      </div> */}
-    </div>
+      {saveError && <p className="mt-2 text-xs text-red-400">{saveError}</p>}
+    </section>
   );
 }
+
 export default ClipSetting;
