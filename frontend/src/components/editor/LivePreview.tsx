@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { TitleSegment } from "../../utils/titleUtils";
-import type { Item } from "../../utils/listUtils";
-import "./LivePreview.css";
 
+import type { Item } from "../../utils/listUtils";
 import RichTitleOverlay from "./RichTitleOverlay";
 import type { TitleDocument } from "../../utils/titleDocument";
+
+import "./LivePreview.css";
 
 type LivePreviewProps = {
   items: Item[];
@@ -28,6 +28,7 @@ function LivePreview({ items, playOrder, titleDocument }: LivePreviewProps) {
   const [visibleTitleId, setVisibleTitleId] = useState<string | null>(null);
 
   const shouldAutoPlayNextRef = useRef(false);
+  const didFinishActiveRangeRef = useRef(false);
 
   const resolvedPlayOrder = useMemo(() => {
     const availableIds = new Set(items.map((item) => item.slotId));
@@ -58,6 +59,42 @@ function LivePreview({ items, playOrder, titleDocument }: LivePreviewProps) {
     ? items.findIndex((item) => item.slotId === activeItem.slotId)
     : -1;
 
+  function getTrimStart(item: Item, video: HTMLVideoElement): number {
+    return Math.max(
+      0,
+      Math.min(item.trimStart, Math.max(0, video.duration - 0.01)),
+    );
+  }
+
+  function getTrimEnd(item: Item, video: HTMLVideoElement): number {
+    const trimStart = getTrimStart(item, video);
+
+    // trimEnd null means use the entire source video.
+    if (typeof item.trimEnd === "number" && Number.isFinite(item.trimEnd)) {
+      return Math.max(trimStart + 0.01, Math.min(item.trimEnd, video.duration));
+    }
+
+    return video.duration;
+  }
+
+  function finishActiveRange() {
+    if (didFinishActiveRangeRef.current) {
+      return;
+    }
+
+    didFinishActiveRangeRef.current = true;
+
+    if (activePlayIndex >= resolvedPlayOrder.length - 1) {
+      setIsPlaying(false);
+      return;
+    }
+
+    setVisibleTitleId(null);
+    shouldAutoPlayNextRef.current = true;
+
+    setActivePlayIndex((previousIndex) => previousIndex + 1);
+  }
+
   useEffect(() => {
     if (resolvedPlayOrder.length === 0) {
       setActivePlayIndex(0);
@@ -73,25 +110,41 @@ function LivePreview({ items, playOrder, titleDocument }: LivePreviewProps) {
 
   useEffect(() => {
     setVisibleTitleId(null);
+    didFinishActiveRangeRef.current = false;
 
     const video = videoRef.current;
 
-    if (!video || !activeItem) {
+    if (video === null || activeItem === null) {
       return;
     }
 
-    video.currentTime = 0;
+    function prepareActiveClip() {
+      video.currentTime = getTrimStart(activeItem, video);
 
-    if (!shouldAutoPlayNextRef.current) {
+      if (!shouldAutoPlayNextRef.current) {
+        return;
+      }
+
+      shouldAutoPlayNextRef.current = false;
+
+      void video.play().catch(() => {
+        setIsPlaying(false);
+      });
+    }
+
+    if (video.readyState >= HTMLMediaElement.HAVE_METADATA) {
+      prepareActiveClip();
       return;
     }
 
-    shouldAutoPlayNextRef.current = false;
-
-    void video.play().catch(() => {
-      setIsPlaying(false);
+    video.addEventListener("loadedmetadata", prepareActiveClip, {
+      once: true,
     });
-  }, [activeItem?.slotId]);
+
+    return () => {
+      video.removeEventListener("loadedmetadata", prepareActiveClip);
+    };
+  }, [activeItem?.slotId, activeItem?.trimStart, activeItem?.trimEnd]);
 
   function changeClip(nextPlayIndex: number) {
     if (nextPlayIndex < 0 || nextPlayIndex >= resolvedPlayOrder.length) {
@@ -102,7 +155,7 @@ function LivePreview({ items, playOrder, titleDocument }: LivePreviewProps) {
 
     setVisibleTitleId(null);
 
-    shouldAutoPlayNextRef.current = video ? !video.paused : false;
+    shouldAutoPlayNextRef.current = video !== null && !video.paused;
 
     setActivePlayIndex(nextPlayIndex);
   }
@@ -118,44 +171,48 @@ function LivePreview({ items, playOrder, titleDocument }: LivePreviewProps) {
   function handlePlayPause() {
     const video = videoRef.current;
 
-    if (!video) {
+    if (video === null || activeItem === null) {
       return;
     }
 
     if (video.paused) {
+      const trimStart = getTrimStart(activeItem, video);
+      const trimEnd = getTrimEnd(activeItem, video);
+
+      if (
+        video.currentTime < trimStart ||
+        video.currentTime >= trimEnd - 0.01
+      ) {
+        video.currentTime = trimStart;
+      }
+
+      didFinishActiveRangeRef.current = false;
+
       void video.play();
-    } else {
-      video.pause();
+      return;
     }
+
+    video.pause();
   }
 
   function handleRestart() {
     const video = videoRef.current;
 
-    if (!video) {
+    if (video === null || activeItem === null) {
       return;
     }
 
     video.pause();
+
     setVisibleTitleId(null);
-    video.currentTime = 0;
+    didFinishActiveRangeRef.current = false;
+
+    video.currentTime = getTrimStart(activeItem, video);
 
     void video.play();
   }
 
-  function handleVideoEnded() {
-    if (activePlayIndex >= resolvedPlayOrder.length - 1) {
-      setIsPlaying(false);
-      return;
-    }
-
-    setVisibleTitleId(null);
-    shouldAutoPlayNextRef.current = true;
-
-    setActivePlayIndex((previousIndex) => previousIndex + 1);
-  }
-
-  if (!activeItem) {
+  if (activeItem === null) {
     return (
       <div className="flex aspect-[9/16] w-full max-w-[360px] items-center justify-center rounded-xl bg-black px-6 text-center text-slate-500">
         Import clips to see your live ranking preview.
@@ -172,13 +229,23 @@ function LivePreview({ items, playOrder, titleDocument }: LivePreviewProps) {
           src={activeItem.videoUrl}
           playsInline
           preload="metadata"
-          onEnded={handleVideoEnded}
+          className="h-full w-full object-cover"
+          onTimeUpdate={(event) => {
+            const video = event.currentTarget;
+            const trimEnd = getTrimEnd(activeItem, video);
+
+            if (video.currentTime >= trimEnd - 0.01) {
+              video.pause();
+              finishActiveRange();
+            }
+          }}
+          onEnded={finishActiveRange}
           onPlay={() => {
+            didFinishActiveRangeRef.current = false;
             setIsPlaying(true);
             setVisibleTitleId(activeItem.slotId);
           }}
           onPause={() => setIsPlaying(false)}
-          className="h-full w-full object-cover"
         />
 
         <div className="pointer-events-none absolute inset-0 overflow-hidden">
@@ -224,12 +291,6 @@ function LivePreview({ items, playOrder, titleDocument }: LivePreviewProps) {
               );
             })}
           </div>
-
-          {/* <div className="absolute bottom-4 left-4">
-            <p className="preview-outline text-6xl font-black italic leading-none text-white">
-              #{activeRankIndex + 1}
-            </p>
-          </div> */}
         </div>
       </div>
 

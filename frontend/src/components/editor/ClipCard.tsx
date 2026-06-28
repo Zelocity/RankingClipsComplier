@@ -1,15 +1,26 @@
+import { useEffect, useRef, useState } from "react";
+
 import { Icons } from "../icons";
 import type { Item } from "../../utils/listUtils";
 import ClipSetting from "./ClipSetting";
+import ClipTrimControls from "./ClipTrimControls";
 
 type ClipCardProps = {
   item: Item;
   itemId: string;
   isExpanded: boolean;
   onToggleExpanded: (slotId: string) => void;
-  onDeleteItem: (slotId: string) => void;
+  onDeleteItem: (slotId: string) => void | Promise<void>;
   onDragHandlePointerDown: () => void;
-  onUpdateItemTitle: (slotId: string, newTitle: string) => void;
+  onUpdateItemTitle: (
+    slotId: string,
+    newTitle: string,
+  ) => void | Promise<void>;
+  onUpdateItemTrim: (
+    slotId: string,
+    trimStart: number,
+    trimEnd: number,
+  ) => void | Promise<void>;
 };
 
 function ClipCard({
@@ -20,7 +31,15 @@ function ClipCard({
   onDeleteItem,
   onDragHandlePointerDown,
   onUpdateItemTitle,
+  onUpdateItemTrim,
 }: ClipCardProps) {
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const [videoDuration, setVideoDuration] = useState(0);
+
+  useEffect(() => {
+    setVideoDuration(0);
+  }, [item.slotId]);
+
   return (
     <div
       data-swapy-item={itemId}
@@ -75,23 +94,46 @@ function ClipCard({
 
       {isExpanded && (
         <div className="grid grid-cols-[300px_minmax(0,1fr)] border-t border-slate-700 bg-slate-800 text-white">
-          <aside className="flex items-center justify-center border-r border-dashed border-slate-600 p-4">
+          <aside
+            data-swapy-no-drag
+            className="flex flex-col justify-center border-r border-dashed border-slate-600 p-4"
+          >
             {item.videoUrl ? (
-              <video
-                className="aspect-[9/16] w-full max-w-[280px] rounded-lg bg-black object-contain"
-                src={item.videoUrl}
-                controls
-                data-swapy-no-drag
-              />
+              <>
+                <video
+                  ref={videoRef}
+                  className="aspect-[9/16] w-full max-w-[280px] rounded-lg bg-black object-contain"
+                  src={item.videoUrl}
+                  controls
+                  data-swapy-no-drag
+                  onLoadedMetadata={(event) => {
+                    const duration = event.currentTarget.duration;
+
+                    if (Number.isFinite(duration) && duration > 0) {
+                      setVideoDuration(duration);
+                    }
+                  }}
+                />
+
+                <ClipTrimControls
+                  item={item}
+                  duration={videoDuration}
+                  videoRef={videoRef}
+                  onUpdateItemTrim={onUpdateItemTrim}
+                />
+              </>
             ) : (
               <p className="text-sm text-slate-400">No video URL yet.</p>
             )}
           </aside>
 
           <main className="p-5">
-            <h3 className="text-lg font-semibold pb-3">Clip Settings</h3>
+            <h3 className="pb-3 text-lg font-semibold">Clip Settings</h3>
 
-            <ClipSetting item={item} onUpdateItemTitle={onUpdateItemTitle} />
+            <ClipSetting
+              item={item}
+              onUpdateItemTitle={onUpdateItemTitle}
+            />
           </main>
         </div>
       )}

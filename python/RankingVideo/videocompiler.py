@@ -34,6 +34,9 @@ OUTLINE_WIDTH = round(2 * EXPORT_SCALE)     # preview-outline
 SLIDE_DURATION = 0.42
 ANIMATION_FPS = 30
 
+# New clips default to the first eight seconds until the user changes the range.
+# DEFAULT_CLIP_DURATION = 8
+
 # Segoe UI Emoji renders visually smaller than the bold text font.
 EMOJI_SCALE = 1.28
 
@@ -859,13 +862,13 @@ def create_rank_layout():
     # Scaled from:
     # left-3 top-16 w-[88%] px-1 py-0.5 gap-2 gap-1 min-w-8
     list_left = round(12 * EXPORT_SCALE)
-    list_top = round( 96 * EXPORT_SCALE)
+    list_top = round(64 * EXPORT_SCALE)
     list_width = round(360 * 0.88 * EXPORT_SCALE)
 
     row_horizontal_padding = round(4 * EXPORT_SCALE)
     row_vertical_padding = round(2 * EXPORT_SCALE)
     item_gap = round(8 * EXPORT_SCALE)
-    row_gap = round(20  * EXPORT_SCALE)
+    row_gap = round(4 * EXPORT_SCALE)
     number_min_width = round(32 * EXPORT_SCALE)
 
     number_line_height = RANK_FONT_SIZE  # leading-none
@@ -1243,6 +1246,8 @@ def create_fallback_clips(input_path: Path):
             "id": file.name,
             "fileName": file.name,
             "title": file.stem,
+            "trimStart": 0.0,
+            "trimEnd": None,
         }
         for file in sorted(input_path.iterdir())
         if file.is_file()
@@ -1265,9 +1270,27 @@ def get_config_clips(config, input_path: Path):
         clip_id = raw_clip.get("id")
         file_name = raw_clip.get("fileName")
         title = raw_clip.get("title")
+        raw_trim_start = raw_clip.get("trimStart")
+        raw_trim_end = raw_clip.get("trimEnd")
 
         if not isinstance(clip_id, str) or not isinstance(file_name, str):
             continue
+
+        trim_start = (
+            float(raw_trim_start)
+            if isinstance(raw_trim_start, (int, float))
+            and not isinstance(raw_trim_start, bool)
+            and raw_trim_start >= 0
+            else 0.0
+        )
+
+        trim_end = (
+            float(raw_trim_end)
+            if isinstance(raw_trim_end, (int, float))
+            and not isinstance(raw_trim_end, bool)
+            and raw_trim_end > trim_start
+            else None
+        )
 
         safe_file_name = Path(file_name).name
         file_path = input_path / safe_file_name
@@ -1289,6 +1312,8 @@ def get_config_clips(config, input_path: Path):
                     if isinstance(title, str) and title.strip()
                     else file_path.stem
                 ),
+                "trimStart": trim_start,
+                "trimEnd": trim_end,
             }
         )
 
@@ -1371,9 +1396,51 @@ def compile_videos(
             source_clip = VideoFileClip(str(video_file))
             source_clips.append(source_clip)
 
+            requested_start = clip_info.get("trimStart", 0.0)
+            requested_end = clip_info.get("trimEnd")
+
+            trim_start = (
+                float(requested_start)
+                if isinstance(requested_start, (int, float))
+                and not isinstance(requested_start, bool)
+                else 0.0
+            )
+
+            # Existing clips with no saved trim selection keep the old
+            # first-eight-seconds behavior. Once a slider selection is saved,
+            # trimEnd is used exactly (clamped to the source duration).
+            default_end = source_clip.duration
+
+            trim_end = (
+                float(requested_end)
+                if isinstance(requested_end, (int, float))
+                and not isinstance(requested_end, bool)
+                else default_end
+            )
+
+            trim_start = max(
+                0.0,
+                min(trim_start, max(0.0, source_clip.duration - 0.01)),
+            )
+
+            trim_end = max(
+                trim_start + 0.01,
+                min(trim_end, source_clip.duration),
+            )
+
+            if trim_end <= trim_start:
+                raise ValueError(
+                    f"Invalid trim range for {video_file.name}: "
+                    f"{trim_start:.2f}s to {trim_end:.2f}s."
+                )
+
+            print(
+                f"  Using range: {trim_start:.2f}s to {trim_end:.2f}s"
+            )
+
             short_clip = source_clip.subclipped(
-                0,
-                min(8, source_clip.duration),
+                trim_start,
+                trim_end,
             )
 
             vertical_clip = format_vertical(short_clip)

@@ -9,6 +9,8 @@ type SavedClip = {
   id: string;
   fileName: string;
   title: string;
+  trimStart: number;
+  trimEnd: number | null;
 };
 
 function isValidJobId(jobId: string): boolean {
@@ -23,60 +25,96 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
+function getTrimStart(value: unknown): number {
+  if (typeof value === "number" && Number.isFinite(value) && value >= 0) {
+    return value;
+  }
+
+  return 0;
+}
+
+function getTrimEnd(value: unknown, trimStart: number): number | null {
+  if (
+    typeof value === "number" &&
+    Number.isFinite(value) &&
+    value > trimStart
+  ) {
+    return value;
+  }
+
+  return null;
+}
+
 function readSavedClips(metadataPath: string, inputPath: string): SavedClip[] {
+  const videoFiles = fs.readdirSync(inputPath).filter(isVideoFile).sort();
+
+  if (videoFiles.length === 0) {
+    return [];
+  }
+
+  let savedMetadata: unknown[] = [];
+
   if (fs.existsSync(metadataPath)) {
     try {
       const rawMetadata = fs.readFileSync(metadataPath, "utf8");
       const parsedMetadata: unknown = JSON.parse(rawMetadata);
 
       if (Array.isArray(parsedMetadata)) {
-        const savedClips = parsedMetadata.flatMap((value) => {
-          if (!isRecord(value)) {
-            return [];
-          }
-
-          const id = value.id;
-          const fileName = value.fileName;
-          const title = value.title;
-
-          if (
-            typeof id !== "string" ||
-            typeof fileName !== "string" ||
-            !isVideoFile(fileName)
-          ) {
-            return [];
-          }
-
-          return [
-            {
-              id,
-              fileName: path.basename(fileName),
-              title:
-                typeof title === "string" && title.trim()
-                  ? title.trim()
-                  : path.parse(fileName).name,
-            },
-          ];
-        });
-
-        if (savedClips.length > 0) {
-          return savedClips;
-        }
+        savedMetadata = parsedMetadata;
       }
     } catch {
-      console.warn("Could not read clips.json. Falling back to input files.");
+      console.warn("Could not read clips.json. Using input files instead.");
     }
   }
 
-  return fs
-    .readdirSync(inputPath)
-    .filter(isVideoFile)
-    .sort()
-    .map((fileName) => ({
-      id: fileName,
+  const savedClips = savedMetadata.flatMap((value, index) => {
+    if (!isRecord(value)) {
+      return [];
+    }
+
+    const fileName = value.fileName;
+    const title = value.title;
+
+    if (typeof fileName !== "string" || !isVideoFile(fileName)) {
+      return [];
+    }
+
+    const safeFileName = path.basename(fileName);
+
+    if (!videoFiles.includes(safeFileName)) {
+      return [];
+    }
+
+    const trimStart = getTrimStart(value.trimStart);
+    const trimEnd = getTrimEnd(value.trimEnd, trimStart);
+
+    return [
+      {
+        id: path.parse(safeFileName).name,
+        fileName: safeFileName,
+        title:
+          typeof title === "string" && title.trim()
+            ? title.trim()
+            : `Untitled ${index + 1}`,
+        trimStart,
+        trimEnd,
+      },
+    ];
+  });
+
+  const savedFileNames = new Set(savedClips.map((clip) => clip.fileName));
+
+  const missingClips = videoFiles
+    .filter((fileName) => !savedFileNames.has(fileName))
+    .map((fileName, index) => ({
+      id: path.parse(fileName).name,
       fileName,
-      title: path.parse(fileName).name,
+      title: `Untitled ${savedClips.length + index + 1}`,
+      trimStart: 0,
+      trimEnd: null,
     }));
+
+  return [...savedClips, ...missingClips];
 }
 
 function getKnownIds(value: unknown, knownIds: Set<string>): string[] {
@@ -102,16 +140,17 @@ function getKnownIds(value: unknown, knownIds: Set<string>): string[] {
 }
 
 function addMissingIds(orderedIds: string[], fallbackIds: string[]): string[] {
-  const seenIds = new Set(orderedIds);
+  const allIds = [...orderedIds];
+  const seenIds = new Set(allIds);
 
   for (const id of fallbackIds) {
     if (!seenIds.has(id)) {
-      orderedIds.push(id);
+      allIds.push(id);
       seenIds.add(id);
     }
   }
 
-  return orderedIds;
+  return allIds;
 }
 
 router.post("/:jobId", (req, res) => {
@@ -129,7 +168,6 @@ router.post("/:jobId", (req, res) => {
 
   const inputPath = path.join(jobPath, "input");
   const outputPath = path.join(jobPath, "output");
-
   const metadataPath = path.join(jobPath, "clips.json");
   const renderConfigPath = path.join(jobPath, "render-config.json");
 
@@ -198,13 +236,19 @@ router.post("/:jobId", (req, res) => {
     clips: savedClips,
   };
 
+  fs.mkdirSync(outputPath, { recursive: true });
+
   fs.writeFileSync(
     renderConfigPath,
     JSON.stringify(renderConfig, null, 2),
     "utf8",
   );
 
-  fs.mkdirSync(outputPath, { recursive: true });
+  const compiledFileName = "compiled_video.mp4";
+  const compiledFilePath = path.join(outputPath, compiledFileName);
+
+  // Removes an old export before compiling again.
+  fs.rmSync(compiledFilePath, { force: true });
 
   const pythonProcess = spawn(
     pythonPath,
@@ -227,32 +271,32 @@ router.post("/:jobId", (req, res) => {
   let errorOutput = "";
   let hasResponded = false;
 
-  function sendResponse(
-    statusCode: number,
-    responseBody: Record<string, unknown>,
-  ) {
+  function sendResponse(statusCode: number, body: Record<string, unknown>) {
     if (hasResponded) {
       return;
     }
 
     hasResponded = true;
-    res.status(statusCode).json(responseBody);
+
+    return res.status(statusCode).json(body);
   }
 
   pythonProcess.stdout.on("data", (data) => {
     const text = data.toString();
+
     output += text;
     console.log(text);
   });
 
   pythonProcess.stderr.on("data", (data) => {
     const text = data.toString();
+
     errorOutput += text;
     console.error(text);
   });
 
   pythonProcess.on("error", (error) => {
-    sendResponse(500, {
+    return sendResponse(500, {
       message: "Could not start the Python compiler.",
       error: error.message,
     });
@@ -266,13 +310,9 @@ router.post("/:jobId", (req, res) => {
     if (code !== 0) {
       return sendResponse(500, {
         message: "Python compiler failed.",
-        error: errorOutput,
+        error: errorOutput || output,
       });
     }
-
-    const compiledFileName = "compiled_video.mp4";
-
-    const compiledFilePath = path.join(outputPath, compiledFileName);
 
     if (!fs.existsSync(compiledFilePath)) {
       return sendResponse(500, {

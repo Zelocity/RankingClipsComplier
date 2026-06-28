@@ -10,6 +10,11 @@ type DraggableItemListProps = {
   items: Item[];
   onDeleteItem: (slotId: string) => void | Promise<void>;
   onUpdateItemTitle: (slotId: string, newTitle: string) => void | Promise<void>;
+  onUpdateItemTrim: (
+    slotId: string,
+    trimStart: number,
+    trimEnd: number,
+  ) => void | Promise<void>;
   onOrderChange: (orderedItems: Item[]) => void;
 };
 
@@ -17,6 +22,7 @@ function DraggableItemList({
   items,
   onDeleteItem,
   onUpdateItemTitle,
+  onUpdateItemTrim,
   onOrderChange,
 }: DraggableItemListProps) {
   const [slotItemMap, setSlotItemMap] = useState<SlotItemMapArray>(
@@ -45,8 +51,6 @@ function DraggableItemList({
 
     const orderedIds = new Set(slottedOrder.map((item) => item.slotId));
 
-    // During a Swapy update, a newly added item may briefly be absent
-    // from slottedItems. Keep it at the end instead of losing it.
     const missingItems = validItems.filter(
       (item) => !orderedIds.has(item.slotId),
     );
@@ -95,7 +99,9 @@ function DraggableItemList({
   }
 
   useEffect(() => {
-    if (!containerRef.current) return;
+    if (!containerRef.current) {
+      return;
+    }
 
     swapyRef.current = createSwapy(containerRef.current, {
       manualSwap: true,
@@ -122,7 +128,7 @@ function DraggableItemList({
       slotItemMap,
       setSlotItemMap,
     );
-  }, [items]);
+  }, [items, slotItemMap]);
 
   return (
     <div ref={containerRef} className="flex flex-col gap-3 pt-5">
@@ -150,6 +156,7 @@ function DraggableItemList({
               onToggleExpanded={handleToggleExpanded}
               onDeleteItem={handleDeleteClip}
               onUpdateItemTitle={onUpdateItemTitle}
+              onUpdateItemTrim={onUpdateItemTrim}
               onDragHandlePointerDown={handleDragHandlePointerDown}
             />
           </div>

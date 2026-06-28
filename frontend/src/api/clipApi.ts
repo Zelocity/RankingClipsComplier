@@ -1,12 +1,32 @@
-const API_URL = "http://localhost:8000";
 import type { TitleDocument } from "../utils/titleDocument";
+
+const API_URL = "http://localhost:8000";
 
 export type Clip = {
   id: string;
   fileName: string;
   title: string;
   videoUrl: string;
+  trimStart: number;
+  trimEnd: number | null;
 };
+
+function toClip(data: Clip): Clip {
+  return {
+    id: data.id,
+    fileName: data.fileName,
+    title: data.title,
+    videoUrl: data.videoUrl,
+    trimStart:
+      typeof data.trimStart === "number" && data.trimStart >= 0
+        ? data.trimStart
+        : 0,
+    trimEnd:
+      typeof data.trimEnd === "number" && data.trimEnd > 0
+        ? data.trimEnd
+        : null,
+  };
+}
 
 export async function updateClipTitle(
   jobId: string,
@@ -30,12 +50,36 @@ export async function updateClipTitle(
     throw new Error(data.message || "Could not update clip title.");
   }
 
-  return {
-    id: data.id,
-    fileName: data.fileName,
-    title: data.title,
-    videoUrl: data.videoUrl,
-  };
+  return toClip(data);
+}
+
+export async function updateClipTrim(
+  jobId: string,
+  clipId: string,
+  trimStart: number,
+  trimEnd: number,
+): Promise<Clip> {
+  const response = await fetch(
+    `${API_URL}/jobs/${jobId}/clips/${clipId}/trim`,
+    {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        trimStart,
+        trimEnd,
+      }),
+    },
+  );
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.message || "Could not update clip range.");
+  }
+
+  return toClip(data);
 }
 
 export async function getClipsForJob(jobId: string): Promise<Clip[]> {
@@ -47,7 +91,7 @@ export async function getClipsForJob(jobId: string): Promise<Clip[]> {
     throw new Error(data.message || "Failed to load saved clips.");
   }
 
-  return data.clips;
+  return data.clips.map(toClip);
 }
 
 export async function importClipFromUrl(
@@ -68,7 +112,7 @@ export async function importClipFromUrl(
     throw new Error(data.error || data.message || "Failed to import clip.");
   }
 
-  return data;
+  return toClip(data);
 }
 
 export type CompileResponse = {
@@ -104,7 +148,10 @@ export async function compileJob(
   return data;
 }
 
-export async function deleteClip(jobId: string, clipId: string): Promise<void> {
+export async function deleteClip(
+  jobId: string,
+  clipId: string,
+): Promise<void> {
   const response = await fetch(`${API_URL}/jobs/${jobId}/clips/${clipId}`, {
     method: "DELETE",
   });

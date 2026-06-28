@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
+
 import {
+  deleteClip,
   getClipsForJob,
   importClipFromUrl,
   updateClipTitle,
-  deleteClip,
+  updateClipTrim,
   type Clip,
 } from "../api/clipApi";
 
@@ -11,6 +13,8 @@ export type Item = {
   slotId: string;
   title: string;
   videoUrl: string;
+  trimStart: number;
+  trimEnd: number | null;
 };
 
 function createItemFromClip(clip: Clip, titleNumber: number): Item {
@@ -18,6 +22,8 @@ function createItemFromClip(clip: Clip, titleNumber: number): Item {
     slotId: clip.id,
     title: clip.title || `Untitled ${titleNumber}`,
     videoUrl: clip.videoUrl,
+    trimStart: clip.trimStart,
+    trimEnd: clip.trimEnd,
   };
 }
 
@@ -36,15 +42,15 @@ export function useItemList(currentJobId: string | undefined) {
       try {
         const clips = await getClipsForJob(currentJobId);
 
-        if (cancelled) return;
+        if (cancelled) {
+          return;
+        }
 
-        const restoredItems = clips.map((clip, index) =>
-          createItemFromClip(clip, index + 1),
+        setItems(
+          clips.map((clip, index) =>
+            createItemFromClip(clip, index + 1),
+          ),
         );
-
-        console.log("Restored clips:", restoredItems);
-
-        setItems(restoredItems);
       } catch (error) {
         console.error("Could not load saved clips:", error);
       }
@@ -57,36 +63,61 @@ export function useItemList(currentJobId: string | undefined) {
     };
   }, [currentJobId]);
 
-  async function handleUpdateItemTitle(slotId: string, newTitle: string) {
+  async function handleUpdateItemTitle(
+    slotId: string,
+    newTitle: string,
+  ) {
     const trimmedTitle = newTitle.trim();
 
     if (!trimmedTitle || !currentJobId) {
       return;
     }
 
-    try {
-      const updatedClip = await updateClipTitle(
-        currentJobId,
-        slotId,
-        trimmedTitle,
-      );
+    const updatedClip = await updateClipTitle(
+      currentJobId,
+      slotId,
+      trimmedTitle,
+    );
 
-      setItems((previousItems) =>
-        previousItems.map((item) =>
-          item.slotId === slotId ? { ...item, title: updatedClip.title } : item,
-        ),
-      );
-    } catch (error) {
-      console.error("Could not update clip title:", error);
-    }
+    setItems((previousItems) =>
+      previousItems.map((item) =>
+        item.slotId === slotId
+          ? {
+              ...item,
+              title: updatedClip.title,
+            }
+          : item,
+      ),
+    );
   }
 
-  function createItemFromClip(clip: Clip, titleNumber: number): Item {
-    return {
-      slotId: clip.id,
-      title: clip.title || `Untitled ${titleNumber}`,
-      videoUrl: clip.videoUrl,
-    };
+  async function handleUpdateItemTrim(
+    slotId: string,
+    trimStart: number,
+    trimEnd: number,
+  ) {
+    if (!currentJobId) {
+      return;
+    }
+
+    const updatedClip = await updateClipTrim(
+      currentJobId,
+      slotId,
+      trimStart,
+      trimEnd,
+    );
+
+    setItems((previousItems) =>
+      previousItems.map((item) =>
+        item.slotId === slotId
+          ? {
+              ...item,
+              trimStart: updatedClip.trimStart,
+              trimEnd: updatedClip.trimEnd,
+            }
+          : item,
+      ),
+    );
   }
 
   async function handleAddItem(jobId: string, url: string) {
@@ -98,7 +129,10 @@ export function useItemList(currentJobId: string | undefined) {
         return;
       }
 
-      const newItem = createItemFromClip(result, itemList.length + 1);
+      const newItem = createItemFromClip(
+        result,
+        itemList.length + 1,
+      );
 
       setItems((previousItems) => [...previousItems, newItem]);
     } catch (error) {
@@ -123,6 +157,7 @@ export function useItemList(currentJobId: string | undefined) {
 
       console.error(message);
       alert(message);
+      throw error;
     }
   }
 
@@ -132,5 +167,6 @@ export function useItemList(currentJobId: string | undefined) {
     handleAddItem,
     handleDeleteItem,
     handleUpdateItemTitle,
+    handleUpdateItemTrim,
   };
 }

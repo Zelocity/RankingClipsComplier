@@ -10,6 +10,8 @@ type ClipMetadata = {
   id: string;
   fileName: string;
   title: string;
+  trimStart: number;
+  trimEnd: number | null;
 };
 
 function isValidJobId(jobId: string): boolean {
@@ -18,6 +20,25 @@ function isValidJobId(jobId: string): boolean {
 
 function isValidFileName(fileName: string): boolean {
   return /^[A-Za-z0-9_.-]+$/.test(fileName);
+}
+
+function getTrimStart(value: unknown): number {
+  return typeof value === "number" &&
+    Number.isFinite(value) &&
+    value >= 0
+    ? value
+    : 0;
+}
+
+function getTrimEnd(
+  value: unknown,
+  trimStart: number,
+): number | null {
+  return typeof value === "number" &&
+    Number.isFinite(value) &&
+    value > trimStart
+    ? value
+    : null;
 }
 
 function getJobPaths(jobId: string) {
@@ -48,8 +69,15 @@ function readClipMetadata(metadataPath: string): ClipMetadata[] {
   }
 }
 
-function writeClipMetadata(metadataPath: string, clips: ClipMetadata[]) {
-  fs.writeFileSync(metadataPath, JSON.stringify(clips, null, 2), "utf8");
+function writeClipMetadata(
+  metadataPath: string,
+  clips: ClipMetadata[],
+) {
+  fs.writeFileSync(
+    metadataPath,
+    JSON.stringify(clips, null, 2),
+    "utf8",
+  );
 }
 
 function getSavedClips(
@@ -63,24 +91,32 @@ function getSavedClips(
 
   const savedMetadata = readClipMetadata(metadataPath);
 
-  // Keep saved clip order and custom titles.
   const savedClips = savedMetadata
     .filter((clip) => videoFiles.includes(clip.fileName))
-    .map((clip, index) => ({
-      id: path.parse(clip.fileName).name,
-      fileName: clip.fileName,
-      title: clip.title?.trim() || `Untitled ${index + 1}`,
-    }));
+    .map((clip, index) => {
+      const trimStart = getTrimStart(clip.trimStart);
 
-  const savedFileNames = new Set(savedClips.map((clip) => clip.fileName));
+      return {
+        id: path.parse(clip.fileName).name,
+        fileName: clip.fileName,
+        title: clip.title?.trim() || `Untitled ${index + 1}`,
+        trimStart,
+        trimEnd: getTrimEnd(clip.trimEnd, trimStart),
+      };
+    });
 
-  // Add MP4 files that existed before clips.json was created.
+  const savedFileNames = new Set(
+    savedClips.map((clip) => clip.fileName),
+  );
+
   const missingClips = videoFiles
     .filter((fileName) => !savedFileNames.has(fileName))
     .map((fileName, index) => ({
       id: path.parse(fileName).name,
       fileName,
       title: `Untitled ${savedClips.length + index + 1}`,
+      trimStart: 0,
+      trimEnd: null,
     }));
 
   const clips = [...savedClips, ...missingClips];
@@ -88,6 +124,20 @@ function getSavedClips(
   writeClipMetadata(metadataPath, clips);
 
   return clips;
+}
+
+function buildClipResponse(jobId: string, clip: ClipMetadata) {
+  return {
+    ...clip,
+    videoUrl: `http://localhost:8000/jobs/${jobId}/clips/${clip.fileName}`,
+  };
+}
+
+function removeStaleExport(outputPath: string) {
+  fs.rmSync(
+    path.join(outputPath, "compiled_video.mp4"),
+    { force: true },
+  );
 }
 
 router.post("/:jobId/import-url", (req, res) => {
@@ -180,8 +230,7 @@ router.post("/:jobId/import-url", (req, res) => {
 
     return res.json({
       message: "Clip imported successfully.",
-      ...importedClip,
-      videoUrl: `http://localhost:8000/jobs/${jobId}/clips/${importedClip.fileName}`,
+      ...buildClipResponse(jobId, importedClip),
     });
   });
 });
@@ -206,10 +255,7 @@ router.get("/:jobId/clips", (req, res) => {
   const clips = getSavedClips(inputPath, metadataPath);
 
   return res.json({
-    clips: clips.map((clip) => ({
-      ...clip,
-      videoUrl: `http://localhost:8000/jobs/${jobId}/clips/${clip.fileName}`,
-    })),
+    clips: clips.map((clip) => buildClipResponse(jobId, clip)),
   });
 });
 
@@ -237,7 +283,11 @@ router.patch("/:jobId/clips/:clipId/title", (req, res) => {
     });
   }
 
-  const { inputPath, metadataPath } = getJobPaths(jobId);
+  const {
+    inputPath,
+    outputPath,
+    metadataPath,
+  } = getJobPaths(jobId);
 
   if (!fs.existsSync(inputPath)) {
     return res.status(404).json({
@@ -261,11 +311,77 @@ router.patch("/:jobId/clips/:clipId/title", (req, res) => {
   };
 
   writeClipMetadata(metadataPath, clips);
+  removeStaleExport(outputPath);
 
   return res.json({
     message: "Clip title updated.",
+    ...buildClipResponse(jobId, clips[clipIndex]),
+  });
+});
+
+router.patch("/:jobId/clips/:clipId/trim", (req, res) => {
+  const { jobId, clipId } = req.params;
+  const { trimStart, trimEnd } = req.body;
+
+  if (!isValidJobId(jobId) || !isValidFileName(clipId)) {
+    return res.status(400).json({
+      message: "Invalid job ID or clip ID.",
+    });
+  }
+
+  if (
+    typeof trimStart !== "number" ||
+    typeof trimEnd !== "number" ||
+    !Number.isFinite(trimStart) ||
+    !Number.isFinite(trimEnd) ||
+    trimStart < 0 ||
+    trimEnd <= trimStart
+  ) {
+    return res.status(400).json({
+      message: "Trim start and end must be valid times.",
+    });
+  }
+
+  if (trimEnd - trimStart < 0.1) {
+    return res.status(400).json({
+      message: "Clip range must be at least 0.1 seconds long.",
+    });
+  }
+
+  const {
+    inputPath,
+    outputPath,
+    metadataPath,
+  } = getJobPaths(jobId);
+
+  if (!fs.existsSync(inputPath)) {
+    return res.status(404).json({
+      message: "Job does not exist.",
+    });
+  }
+
+  const clips = getSavedClips(inputPath, metadataPath);
+
+  const clipIndex = clips.findIndex((clip) => clip.id === clipId);
+
+  if (clipIndex === -1) {
+    return res.status(404).json({
+      message: "Clip not found.",
+    });
+  }
+
+  clips[clipIndex] = {
     ...clips[clipIndex],
-    videoUrl: `http://localhost:8000/jobs/${jobId}/clips/${clips[clipIndex].fileName}`,
+    trimStart,
+    trimEnd,
+  };
+
+  writeClipMetadata(metadataPath, clips);
+  removeStaleExport(outputPath);
+
+  return res.json({
+    message: "Clip range updated.",
+    ...buildClipResponse(jobId, clips[clipIndex]),
   });
 });
 
@@ -278,7 +394,11 @@ router.delete("/:jobId/clips/:clipId", (req, res) => {
     });
   }
 
-  const { inputPath, outputPath, metadataPath } = getJobPaths(jobId);
+  const {
+    inputPath,
+    outputPath,
+    metadataPath,
+  } = getJobPaths(jobId);
 
   if (!fs.existsSync(inputPath)) {
     return res.status(404).json({
@@ -298,19 +418,15 @@ router.delete("/:jobId/clips/:clipId", (req, res) => {
 
   const deletedClip = clips[clipIndex];
 
-  const videoPath = path.join(inputPath, path.basename(deletedClip.fileName));
-
   try {
-    // Delete the real MP4 file.
-    fs.rmSync(videoPath, { force: true });
+    fs.rmSync(
+      path.join(inputPath, path.basename(deletedClip.fileName)),
+      { force: true },
+    );
 
-    // Remove the clip from clips.json.
     clips.splice(clipIndex, 1);
-
     writeClipMetadata(metadataPath, clips);
-
-    // Remove an old export so it cannot be downloaded after a clip changed.
-    fs.rmSync(path.join(outputPath, "compiled_video.mp4"), { force: true });
+    removeStaleExport(outputPath);
 
     return res.json({
       message: "Clip deleted successfully.",
@@ -318,7 +434,9 @@ router.delete("/:jobId/clips/:clipId", (req, res) => {
     });
   } catch (error) {
     const message =
-      error instanceof Error ? error.message : "Could not delete clip.";
+      error instanceof Error
+        ? error.message
+        : "Could not delete clip.";
 
     return res.status(500).json({
       message,
@@ -342,7 +460,6 @@ router.get("/:jobId/clips/:fileName", (req, res) => {
   }
 
   const { inputPath } = getJobPaths(jobId);
-
   const filePath = path.join(inputPath, fileName);
 
   if (!fs.existsSync(filePath)) {
@@ -370,7 +487,6 @@ router.get("/:jobId/output/:fileName/download", (req, res) => {
   }
 
   const { outputPath } = getJobPaths(jobId);
-
   const filePath = path.join(outputPath, fileName);
 
   if (!fs.existsSync(filePath)) {
@@ -398,7 +514,6 @@ router.get("/:jobId/output/:fileName", (req, res) => {
   }
 
   const { outputPath } = getJobPaths(jobId);
-
   const filePath = path.join(outputPath, fileName);
 
   if (!fs.existsSync(filePath)) {

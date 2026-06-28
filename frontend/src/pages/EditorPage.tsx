@@ -15,8 +15,13 @@ import { type Item, useItemList } from "../utils/listUtils";
 function EditorPage() {
   const { jobId } = useParams<{ jobId: string }>();
 
-  const { itemList, handleAddItem, handleDeleteItem, handleUpdateItemTitle } =
-    useItemList(jobId);
+  const {
+    itemList,
+    handleAddItem,
+    handleDeleteItem,
+    handleUpdateItemTitle,
+    handleUpdateItemTrim,
+  } = useItemList(jobId);
 
   const [compiledVideoUrl, setCompiledVideoUrl] = useState<string | null>(null);
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
@@ -122,6 +127,7 @@ function EditorPage() {
           items={itemList}
           onDeleteItem={handleDeleteItem}
           onUpdateItemTitle={handleUpdateItemTitle}
+          onUpdateItemTrim={handleUpdateItemTrim}
           onOrderChange={setPreviewItems}
         />
 
