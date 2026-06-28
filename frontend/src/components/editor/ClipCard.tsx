@@ -11,7 +11,6 @@ type ClipCardProps = {
   isExpanded: boolean;
   onToggleExpanded: (slotId: string) => void;
   onDeleteItem: (slotId: string) => void | Promise<void>;
-  onDragHandlePointerDown: () => void;
   onUpdateItemTitle: (slotId: string, newTitle: string) => void | Promise<void>;
   onUpdateItemTrim: (
     slotId: string,
@@ -26,7 +25,6 @@ function ClipCard({
   isExpanded,
   onToggleExpanded,
   onDeleteItem,
-  onDragHandlePointerDown,
   onUpdateItemTitle,
   onUpdateItemTrim,
 }: ClipCardProps) {
@@ -50,18 +48,18 @@ function ClipCard({
         <span className="flex min-w-0 items-center gap-2 truncate font-medium text-slate-100">
           <span
             data-swapy-handle
-            onPointerDownCapture={onDragHandlePointerDown}
             className="cursor-grab select-none rounded p-1 text-slate-500 active:cursor-grabbing"
           >
             ⋮⋮
           </span>
 
-          {item.title}
+          <span className="truncate">{item.title}</span>
         </span>
 
         <div className="ml-4 flex shrink-0 items-center gap-2">
           <button
             type="button"
+            data-swapy-no-drag
             onPointerDown={(event) => event.stopPropagation()}
             onClick={(event) => {
               event.stopPropagation();
@@ -76,6 +74,7 @@ function ClipCard({
           <button
             type="button"
             data-swapy-no-drag
+            onPointerDown={(event) => event.stopPropagation()}
             onClick={() => onToggleExpanded(item.slotId)}
             aria-label={isExpanded ? "Collapse video" : "Expand video"}
             className="rounded-md p-2 text-slate-400 transition-colors hover:bg-slate-700 hover:text-white"
@@ -89,7 +88,7 @@ function ClipCard({
         </div>
       </div>
 
-      {isExpanded && (
+      {isExpanded ? (
         <div className="grid grid-cols-[300px_minmax(0,1fr)] border-t border-slate-700 bg-slate-800 text-white">
           <aside
             data-swapy-no-drag
@@ -98,10 +97,10 @@ function ClipCard({
             {item.videoUrl ? (
               <video
                 ref={videoRef}
-                className="aspect-[9/16] w-full max-w-[280px] rounded-lg bg-black object-contain"
                 src={item.videoUrl}
                 controls
                 data-swapy-no-drag
+                className="aspect-[9/16] w-full max-w-[280px] rounded-lg bg-black object-contain"
                 onLoadedMetadata={(event) => {
                   const duration = event.currentTarget.duration;
 
@@ -115,7 +114,7 @@ function ClipCard({
             )}
           </aside>
 
-          <main className="p-5">
+          <main data-swapy-no-drag className="p-5">
             <h3 className="pb-3 text-lg font-semibold">Clip Settings</h3>
 
             <ClipSetting item={item} onUpdateItemTitle={onUpdateItemTitle} />
@@ -128,7 +127,7 @@ function ClipCard({
             />
           </main>
         </div>
-      )}
+      ) : null}
     </div>
   );
 }

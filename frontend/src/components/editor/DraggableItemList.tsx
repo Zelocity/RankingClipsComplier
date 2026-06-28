@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { flushSync } from "react-dom";
 import { createSwapy, utils } from "swapy";
 import type { SlotItemMapArray, Swapy } from "swapy";
 
@@ -44,9 +43,7 @@ function DraggableItemList({
     );
 
     const slottedOrder = slottedItems.flatMap((slottedItem) => {
-      const item = slottedItem?.item;
-
-      return item ? [item] : [];
+      return slottedItem?.item ? [slottedItem.item] : [];
     });
 
     const orderedIds = new Set(slottedOrder.map((item) => item.slotId));
@@ -88,18 +85,18 @@ function DraggableItemList({
     });
   }
 
-  function handleDragHandlePointerDown() {
-    if (expandedItems.size === 0) {
-      return;
-    }
+  function collapseAllCards() {
+    setExpandedItems((previousItems) => {
+      if (previousItems.size === 0) {
+        return previousItems;
+      }
 
-    flushSync(() => {
-      setExpandedItems(new Set());
+      return new Set();
     });
   }
 
   useEffect(() => {
-    if (!containerRef.current) {
+    if (containerRef.current === null) {
       return;
     }
 
@@ -108,6 +105,17 @@ function DraggableItemList({
       swapMode: "drop",
       dragAxis: "y",
       animation: "none",
+    });
+
+    // Backup collapse in case the pointer handler did not fire first.
+    swapyRef.current.onSwapStart(() => {
+      setExpandedItems((previousItems) => {
+        if (previousItems.size === 0) {
+          return previousItems;
+        }
+
+        return new Set();
+      });
     });
 
     swapyRef.current.onSwap((event) => {
@@ -128,7 +136,7 @@ function DraggableItemList({
       slotItemMap,
       setSlotItemMap,
     );
-  }, [items, slotItemMap]);
+  }, [items]);
 
   return (
     <div ref={containerRef} className="flex flex-col gap-3 pt-5">
@@ -147,7 +155,9 @@ function DraggableItemList({
           <div
             key={slotId}
             data-swapy-slot={slotId}
-            className="rounded-xl border border-slate-700 bg-slate-900 p-1"
+            className={`overflow-visible rounded-xl border border-slate-700 bg-slate-900 p-1 transition-[max-height] duration-200 ${
+              expandedItems.has(item.slotId) ? "max-h-[1400px]" : "max-h-20"
+            }`}
           >
             <ClipCard
               item={item}
@@ -157,7 +167,6 @@ function DraggableItemList({
               onDeleteItem={handleDeleteClip}
               onUpdateItemTitle={onUpdateItemTitle}
               onUpdateItemTrim={onUpdateItemTrim}
-              onDragHandlePointerDown={handleDragHandlePointerDown}
             />
           </div>
         );

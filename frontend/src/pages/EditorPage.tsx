@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useParams } from "react-router-dom";
 
 import RevealOrderPanel from "../components/editor/RevealOrderPanel";
@@ -12,6 +12,7 @@ import { compileJob } from "../api/clipApi";
 import DraggableItemList from "../components/editor/DraggableItemList";
 import SubmitUrlForm from "../components/editor/SubmitUrlForm";
 import { type Item, useItemList } from "../utils/listUtils";
+
 function EditorPage() {
   const { jobId } = useParams<{ jobId: string }>();
 
@@ -29,24 +30,59 @@ function EditorPage() {
   const [isCompiling, setIsCompiling] = useState(false);
   const [compileError, setCompileError] = useState("");
 
+  // This is the order created by dragging cards around.
   const [previewItems, setPreviewItems] = useState<Item[]>([]);
+
+  // This is the separate order used to reveal clips.
   const [playOrder, setPlayOrder] = useState<string[]>([]);
 
   const [titleDocument, setTitleDocument] = useState<TitleDocument>(
     createDefaultTitleDocument,
   );
 
+  const rankedItems = useMemo(() => {
+    if (previewItems.length === 0) {
+      return itemList;
+    }
+
+    const currentItemsById = new Map(
+      itemList.map((item) => [item.slotId, item]),
+    );
+
+    const orderedItems: Item[] = [];
+    const seenIds = new Set<string>();
+
+    for (const previewItem of previewItems) {
+      const currentItem = currentItemsById.get(previewItem.slotId);
+
+      if (currentItem && !seenIds.has(currentItem.slotId)) {
+        orderedItems.push(currentItem);
+        seenIds.add(currentItem.slotId);
+      }
+    }
+
+    for (const item of itemList) {
+      if (!seenIds.has(item.slotId)) {
+        orderedItems.push(item);
+      }
+    }
+
+    return orderedItems;
+  }, [itemList, previewItems]);
+
   useEffect(() => {
     setPlayOrder((previousOrder) => {
-      const availableIds = new Set(previewItems.map((item) => item.slotId));
+      const availableIds = new Set(rankedItems.map((item) => item.slotId));
 
+      // Keep the existing reveal sequence.
       const keptIds = previousOrder.filter((slotId) =>
         availableIds.has(slotId),
       );
 
       const keptIdSet = new Set(keptIds);
 
-      const newIds = previewItems
+      // Only add newly imported clips to the end of Reveal Order.
+      const newIds = rankedItems
         .map((item) => item.slotId)
         .filter((slotId) => !keptIdSet.has(slotId));
 
@@ -58,7 +94,7 @@ function EditorPage() {
 
       return didOrderChange ? nextOrder : previousOrder;
     });
-  }, [previewItems]);
+  }, [rankedItems]);
 
   function handleMovePlayOrder(fromIndex: number, direction: -1 | 1) {
     setPlayOrder((previousOrder) => {
@@ -80,11 +116,9 @@ function EditorPage() {
   }
 
   async function handleCompile() {
-    if (!jobId || itemList.length === 0 || isCompiling) {
+    if (!jobId || rankedItems.length === 0 || isCompiling) {
       return;
     }
-
-    const rankedItems = previewItems.length > 0 ? previewItems : itemList;
 
     try {
       setIsCompiling(true);
@@ -132,7 +166,7 @@ function EditorPage() {
         />
 
         <RevealOrderPanel
-          items={previewItems}
+          items={rankedItems}
           playOrder={playOrder}
           onMove={handleMovePlayOrder}
         />
@@ -152,7 +186,7 @@ function EditorPage() {
           ) : (
             <div className="flex min-h-[600px] w-full max-w-3xl items-center justify-center rounded-2xl border-2 border-dashed border-slate-600 bg-slate-900 p-6">
               <LivePreview
-                items={previewItems}
+                items={rankedItems}
                 playOrder={playOrder}
                 titleDocument={titleDocument}
               />
@@ -163,7 +197,7 @@ function EditorPage() {
         <button
           type="button"
           onClick={handleCompile}
-          disabled={isCompiling || itemList.length === 0}
+          disabled={isCompiling || rankedItems.length === 0}
           className="mt-5 rounded-lg bg-violet-600 px-5 py-3 font-semibold text-white transition-colors hover:bg-violet-500 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {isCompiling ? "Compiling..." : "Compile Video"}
