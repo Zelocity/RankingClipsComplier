@@ -859,13 +859,13 @@ def create_rank_layout():
     # Scaled from:
     # left-3 top-16 w-[88%] px-1 py-0.5 gap-2 gap-1 min-w-8
     list_left = round(12 * EXPORT_SCALE)
-    list_top = round(64 * EXPORT_SCALE)
+    list_top = round( 96 * EXPORT_SCALE)
     list_width = round(360 * 0.88 * EXPORT_SCALE)
 
     row_horizontal_padding = round(4 * EXPORT_SCALE)
     row_vertical_padding = round(2 * EXPORT_SCALE)
     item_gap = round(8 * EXPORT_SCALE)
-    row_gap = round(4 * EXPORT_SCALE)
+    row_gap = round(20  * EXPORT_SCALE)
     number_min_width = round(32 * EXPORT_SCALE)
 
     number_line_height = RANK_FONT_SIZE  # leading-none

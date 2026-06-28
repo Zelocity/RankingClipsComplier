@@ -186,7 +186,7 @@ function LivePreview({ items, playOrder, titleDocument }: LivePreviewProps) {
             <RichTitleOverlay document={titleDocument} />
           </div>
 
-          <div className="absolute left-3 top-16 flex w-[88%] flex-col gap-1">
+          <div className="absolute left-3 top-24 flex w-[88%] flex-col gap-5">
             {items.map((item, rankIndex) => {
               const isActiveRank = rankIndex === activeRankIndex;
 
@@ -203,9 +203,7 @@ function LivePreview({ items, playOrder, titleDocument }: LivePreviewProps) {
               return (
                 <div
                   key={item.slotId}
-                  className={`flex items-center gap-2 rounded-md px-1 py-0.5 ${
-                    isActiveRank ? "bg-black/40" : ""
-                  }`}
+                  className="flex items-center gap-2 rounded-md px-1 py-0.5"
                 >
                   <span
                     className={`preview-outline min-w-8 text-3xl font-black italic leading-none ${rankColor}`}
