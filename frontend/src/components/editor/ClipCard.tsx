@@ -46,12 +46,15 @@ function ClipCard({
         <div className="ml-4 flex shrink-0 items-center gap-2">
           <button
             type="button"
-            data-swapy-no-drag
-            onClick={() => onDeleteItem(item.slotId)}
-            aria-label="Delete clip"
-            className="rounded-md border border-red-500/40 bg-red-500/10 p-2 text-red-300 transition-colors hover:bg-red-500/20 hover:text-red-100"
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={(event) => {
+              event.stopPropagation();
+              void onDeleteItem(item.slotId);
+            }}
+            className="rounded-md p-2 text-red-400 transition hover:bg-red-500/20 hover:text-red-300"
+            aria-label={`Delete ${item.title}`}
           >
-            <Icons.Trash size={18} />
+            Delete
           </button>
 
           <button

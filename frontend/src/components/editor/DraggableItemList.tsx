@@ -8,8 +8,8 @@ import type { Item } from "../../utils/listUtils";
 
 type DraggableItemListProps = {
   items: Item[];
-  onDeleteItem: (slotId: string) => void;
-  onUpdateItemTitle: (slotId: string, newTitle: string) => void;
+  onDeleteItem: (slotId: string) => void | Promise<void>;
+  onUpdateItemTitle: (slotId: string, newTitle: string) => void | Promise<void>;
   onOrderChange: (orderedItems: Item[]) => void;
 };
 
@@ -53,6 +53,22 @@ function DraggableItemList({
 
     onOrderChange([...slottedOrder, ...missingItems]);
   }, [items, slottedItems, onOrderChange]);
+
+  async function handleDeleteClip(slotId: string) {
+    try {
+      await onDeleteItem(slotId);
+
+      setExpandedItems((previousItems) => {
+        const updatedItems = new Set(previousItems);
+
+        updatedItems.delete(slotId);
+
+        return updatedItems;
+      });
+    } catch (error) {
+      console.error("Could not delete clip:", error);
+    }
+  }
 
   function handleToggleExpanded(slotId: string) {
     setExpandedItems((previousItems) => {
@@ -132,7 +148,7 @@ function DraggableItemList({
               itemId={itemId}
               isExpanded={expandedItems.has(item.slotId)}
               onToggleExpanded={handleToggleExpanded}
-              onDeleteItem={onDeleteItem}
+              onDeleteItem={handleDeleteClip}
               onUpdateItemTitle={onUpdateItemTitle}
               onDragHandlePointerDown={handleDragHandlePointerDown}
             />

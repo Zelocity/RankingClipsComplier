@@ -348,5 +348,63 @@ router.get("/:jobId/output/:fileName", (req, res) => {
 
   return res.sendFile(filePath);
 });
+router.delete("/:jobId/clips/:clipId", (req, res) => {
+  const { jobId, clipId } = req.params;
+
+  if (!isValidJobId(jobId)) {
+    return res.status(400).json({
+      message: "Invalid job ID.",
+    });
+  }
+
+  const projectRoot = path.resolve(process.cwd(), "..");
+
+  const jobPath = path.join(projectRoot, "storage", "jobs", jobId);
+
+  const inputPath = path.join(jobPath, "input");
+  const outputPath = path.join(jobPath, "output");
+  const metadataPath = path.join(jobPath, "clips.json");
+
+  if (!fs.existsSync(metadataPath)) {
+    return res.status(404).json({
+      message: "Saved clip data was not found.",
+    });
+  }
+
+  try {
+    const clips = JSON.parse(fs.readFileSync(metadataPath, "utf8")) as Clip[];
+
+    const clipIndex = clips.findIndex((clip) => clip.id === clipId);
+
+    if (clipIndex === -1) {
+      return res.status(404).json({
+        message: "Clip was not found.",
+      });
+    }
+
+    const [deletedClip] = clips.splice(clipIndex, 1);
+
+    const videoPath = path.join(inputPath, path.basename(deletedClip.fileName));
+
+    fs.rmSync(videoPath, { force: true });
+
+    fs.writeFileSync(metadataPath, JSON.stringify(clips, null, 2), "utf8");
+
+    // Remove the old export so users do not download an outdated video.
+    fs.rmSync(path.join(outputPath, "compiled_video.mp4"), { force: true });
+
+    return res.json({
+      message: "Clip deleted.",
+      id: deletedClip.id,
+    });
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Could not delete clip.";
+
+    return res.status(500).json({
+      message,
+    });
+  }
+});
 
 export default router;

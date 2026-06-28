@@ -103,3 +103,15 @@ export async function compileJob(
 
   return data;
 }
+
+export async function deleteClip(jobId: string, clipId: string): Promise<void> {
+  const response = await fetch(`${API_URL}/jobs/${jobId}/clips/${clipId}`, {
+    method: "DELETE",
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.message || "Could not delete clip.");
+  }
+}

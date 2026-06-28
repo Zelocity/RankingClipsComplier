@@ -3,6 +3,7 @@ import {
   getClipsForJob,
   importClipFromUrl,
   updateClipTitle,
+  deleteClip,
   type Clip,
 } from "../api/clipApi";
 
@@ -105,10 +106,24 @@ export function useItemList(currentJobId: string | undefined) {
     }
   }
 
-  function handleDeleteItem(slotId: string) {
-    setItems((previousItems) =>
-      previousItems.filter((item) => item.slotId !== slotId),
-    );
+  async function handleDeleteItem(slotId: string) {
+    if (!currentJobId) {
+      return;
+    }
+
+    try {
+      await deleteClip(currentJobId, slotId);
+
+      setItems((previousItems) =>
+        previousItems.filter((item) => item.slotId !== slotId),
+      );
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Could not delete clip.";
+
+      console.error(message);
+      alert(message);
+    }
   }
 
   return {
