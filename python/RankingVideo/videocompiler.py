@@ -4,6 +4,8 @@ import json
 import re
 import unicodedata
 from functools import lru_cache
+from urllib.error import URLError
+from urllib.request import Request, urlopen
 
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
@@ -35,15 +37,19 @@ ANIMATION_FPS = 30
 # Segoe UI Emoji renders visually smaller than the bold text font.
 EMOJI_SCALE = 1.28
 
-# Noto Color Emoji uses fixed bitmap strikes in Pillow. Render it at its
-# supported 109px strike, then resize the resulting transparent image.
-NOTO_EMOJI_PATH = (
+# Use Noto's PNG assets instead of NotoColorEmoji.ttf.
+# The font uses the CBDT/CBLC bitmap format, which can render as transparent
+# in some Pillow/FreeType builds. PNG assets render consistently.
+NOTO_PNG_DIR = (
     Path(__file__).resolve().parent
     / "assets"
-    / "fonts"
-    / "NotoColorEmoji.ttf"
+    / "noto-emoji"
+    / "128"
 )
-NOTO_EMOJI_NATIVE_SIZE = 109
+NOTO_PNG_BASE_URL = (
+    "https://raw.githubusercontent.com/googlefonts/"
+    "noto-emoji/main/png/128"
+)
 
 RANK_COLORS = [
     (239, 68, 68, 255),     # Tailwind red-500
@@ -113,18 +119,112 @@ def load_font(font_size: int, italic: bool = False):
     )
 
 
-@lru_cache(maxsize=1)
-def load_emoji_font():
-    if not NOTO_EMOJI_PATH.exists():
-        raise FileNotFoundError(
-            "Noto Color Emoji was not found. Put NotoColorEmoji.ttf at: "
-            f"{NOTO_EMOJI_PATH}"
+def emoji_asset_filename(emoji_text: str) -> str:
+    codepoints = []
+
+    for character in emoji_text:
+        # Noto's asset names omit text/emoji variation selectors.
+        if ord(character) in {0xFE0E, 0xFE0F}:
+            continue
+
+        codepoints.append(f"{ord(character):04x}")
+
+    return f"emoji_u{'_'.join(codepoints)}.png"
+
+
+def get_noto_asset_path(emoji_text: str) -> Path:
+    return NOTO_PNG_DIR / emoji_asset_filename(emoji_text)
+
+
+def download_noto_asset(emoji_text: str, destination: Path) -> bool:
+    destination.parent.mkdir(parents=True, exist_ok=True)
+
+    url = f"{NOTO_PNG_BASE_URL}/{destination.name}"
+
+    try:
+        request = Request(
+            url,
+            headers={
+                "User-Agent": "RankingVideoCompiler/1.0",
+            },
         )
 
-    return ImageFont.truetype(
-        str(NOTO_EMOJI_PATH),
-        NOTO_EMOJI_NATIVE_SIZE,
+        with urlopen(request, timeout=15) as response:
+            destination.write_bytes(response.read())
+
+        return True
+    except (URLError, OSError) as error:
+        print(
+            f"Could not download Noto emoji asset "
+            f"for {emoji_text!r}: {error}"
+        )
+
+        return False
+
+
+def render_segoe_fallback(
+    emoji_text: str,
+    target_height: int,
+) -> Image.Image:
+    fallback_path = Path(r"C:\Windows\Fonts\seguiemj.ttf")
+
+    if not fallback_path.exists():
+        return Image.new("RGBA", (target_height, target_height), (0, 0, 0, 0))
+
+    fallback_font = ImageFont.truetype(
+        str(fallback_path),
+        target_height,
     )
+
+    canvas = Image.new(
+        "RGBA",
+        (target_height * 3, target_height * 2),
+        (0, 0, 0, 0),
+    )
+    draw = ImageDraw.Draw(canvas)
+
+    draw.text(
+        (0, 0),
+        emoji_text,
+        font=fallback_font,
+        embedded_color=True,
+    )
+
+    bbox = canvas.getbbox()
+
+    if bbox is None:
+        return Image.new("RGBA", (target_height, target_height), (0, 0, 0, 0))
+
+    emoji_image = canvas.crop(bbox)
+
+    square = Image.new(
+        "RGBA",
+        (target_height, target_height),
+        (0, 0, 0, 0),
+    )
+
+    scale = min(
+        target_height / emoji_image.width,
+        target_height / emoji_image.height,
+    )
+
+    resized = emoji_image.resize(
+        (
+            max(1, round(emoji_image.width * scale)),
+            max(1, round(emoji_image.height * scale)),
+        ),
+        Image.Resampling.LANCZOS,
+    )
+
+    square.alpha_composite(
+        resized,
+        (
+            (target_height - resized.width) // 2,
+            (target_height - resized.height) // 2,
+        ),
+    )
+
+    return square
 
 def is_emoji_base(character: str) -> bool:
     codepoint = ord(character)
@@ -251,13 +351,18 @@ def split_display_units(text: str):
 
 
 def split_emoji_runs(text: str):
+    # Keep each emoji as its own run. Noto Color Emoji's bitmap glyphs are
+    # square, and measuring a whole run such as "🤣🤣🤣" as one image can
+    # make the label look wider than it really is and trigger "...".
     runs = []
 
     for unit, is_emoji in split_display_units(text):
-        if runs and runs[-1][1] == is_emoji:
-            runs[-1] = (runs[-1][0] + unit, is_emoji)
+        if is_emoji:
+            runs.append((unit, True))
+        elif runs and not runs[-1][1]:
+            runs[-1] = (runs[-1][0] + unit, False)
         else:
-            runs.append((unit, is_emoji))
+            runs.append((unit, False))
 
     return runs
 
@@ -280,70 +385,58 @@ def emoji_target_height(font) -> int:
 
 @lru_cache(maxsize=512)
 def render_noto_emoji(emoji_text: str, target_height: int):
-    emoji_font = load_emoji_font()
+    asset_path = get_noto_asset_path(emoji_text)
 
-    # Draw at Noto's native strike first. This avoids the Pillow
-    # "invalid pixel size" error from trying to load it at arbitrary sizes.
-    margin = 16
-    measure_image = Image.new(
-        "RGBA",
-        (
-            NOTO_EMOJI_NATIVE_SIZE * 4,
-            NOTO_EMOJI_NATIVE_SIZE + margin * 2,
-        ),
-        (0, 0, 0, 0),
-    )
-    measure_draw = ImageDraw.Draw(measure_image)
+    if not asset_path.exists():
+        download_noto_asset(emoji_text, asset_path)
 
-    bbox = measure_draw.textbbox(
-        (margin, margin),
-        emoji_text,
-        font=emoji_font,
-        embedded_color=True,
-    )
+    if not asset_path.exists():
+        # The export still shows an emoji if the one-time asset download fails.
+        return render_segoe_fallback(emoji_text, target_height)
 
-    if bbox is None:
-        return Image.new("RGBA", (1, 1), (0, 0, 0, 0))
-
-    image_width = max(1, bbox[2] - bbox[0] + margin * 2)
-    image_height = max(1, bbox[3] - bbox[1] + margin * 2)
-
-    emoji_image = Image.new(
-        "RGBA",
-        (image_width, image_height),
-        (0, 0, 0, 0),
-    )
-    emoji_draw = ImageDraw.Draw(emoji_image)
-
-    emoji_draw.text(
-        (margin - bbox[0], margin - bbox[1]),
-        emoji_text,
-        font=emoji_font,
-        embedded_color=True,
-    )
+    try:
+        with Image.open(asset_path) as asset:
+            emoji_image = asset.convert("RGBA").copy()
+    except OSError as error:
+        print(f"Could not open Noto emoji asset {asset_path}: {error}")
+        return render_segoe_fallback(emoji_text, target_height)
 
     alpha_bbox = emoji_image.getbbox()
 
     if alpha_bbox is not None:
         emoji_image = emoji_image.crop(alpha_bbox)
 
-    if emoji_image.height <= 0:
-        return Image.new("RGBA", (1, 1), (0, 0, 0, 0))
+    if emoji_image.width <= 0 or emoji_image.height <= 0:
+        return render_segoe_fallback(emoji_text, target_height)
 
-    scaled_width = max(
-        1,
-        round(
-            emoji_image.width
-            * target_height
-            / emoji_image.height
-        ),
+    scale = min(
+        target_height / emoji_image.width,
+        target_height / emoji_image.height,
     )
 
-    return emoji_image.resize(
-        (scaled_width, target_height),
+    resized = emoji_image.resize(
+        (
+            max(1, round(emoji_image.width * scale)),
+            max(1, round(emoji_image.height * scale)),
+        ),
         Image.Resampling.LANCZOS,
     )
 
+    square = Image.new(
+        "RGBA",
+        (target_height, target_height),
+        (0, 0, 0, 0),
+    )
+
+    square.alpha_composite(
+        resized,
+        (
+            (target_height - resized.width) // 2,
+            (target_height - resized.height) // 2,
+        ),
+    )
+
+    return square
 
 def get_emoji_y(
     draw,
