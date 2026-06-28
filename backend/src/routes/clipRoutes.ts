@@ -28,6 +28,7 @@ function getJobPaths(jobId: string) {
     projectRoot,
     jobPath,
     inputPath: path.join(jobPath, "input"),
+    outputPath: path.join(jobPath, "output"),
     metadataPath: path.join(jobPath, "clips.json"),
   };
 }
@@ -39,9 +40,9 @@ function readClipMetadata(metadataPath: string): ClipMetadata[] {
 
   try {
     const fileContents = fs.readFileSync(metadataPath, "utf8");
-    const clips = JSON.parse(fileContents);
+    const clips: unknown = JSON.parse(fileContents);
 
-    return Array.isArray(clips) ? clips : [];
+    return Array.isArray(clips) ? (clips as ClipMetadata[]) : [];
   } catch {
     return [];
   }
@@ -62,7 +63,7 @@ function getSavedClips(
 
   const savedMetadata = readClipMetadata(metadataPath);
 
-  // Keep existing saved clip order and custom titles.
+  // Keep saved clip order and custom titles.
   const savedClips = savedMetadata
     .filter((clip) => videoFiles.includes(clip.fileName))
     .map((clip, index) => ({
@@ -73,7 +74,7 @@ function getSavedClips(
 
   const savedFileNames = new Set(savedClips.map((clip) => clip.fileName));
 
-  // Add videos that existed before clips.json was created.
+  // Add MP4 files that existed before clips.json was created.
   const missingClips = videoFiles
     .filter((fileName) => !savedFileNames.has(fileName))
     .map((fileName, index) => ({
@@ -94,17 +95,23 @@ router.post("/:jobId/import-url", (req, res) => {
   const { url } = req.body;
 
   if (!isValidJobId(jobId)) {
-    return res.status(400).json({ message: "Invalid job ID." });
+    return res.status(400).json({
+      message: "Invalid job ID.",
+    });
   }
 
   if (!url || typeof url !== "string") {
-    return res.status(400).json({ message: "URL is required." });
+    return res.status(400).json({
+      message: "URL is required.",
+    });
   }
 
   const { projectRoot, inputPath, metadataPath } = getJobPaths(jobId);
 
   if (!fs.existsSync(inputPath)) {
-    return res.status(404).json({ message: "Job does not exist." });
+    return res.status(404).json({
+      message: "Job does not exist.",
+    });
   }
 
   const pythonPath = path.join(
@@ -183,13 +190,17 @@ router.get("/:jobId/clips", (req, res) => {
   const { jobId } = req.params;
 
   if (!isValidJobId(jobId)) {
-    return res.status(400).json({ message: "Invalid job ID." });
+    return res.status(400).json({
+      message: "Invalid job ID.",
+    });
   }
 
   const { inputPath, metadataPath } = getJobPaths(jobId);
 
   if (!fs.existsSync(inputPath)) {
-    return res.status(404).json({ message: "Job does not exist." });
+    return res.status(404).json({
+      message: "Job does not exist.",
+    });
   }
 
   const clips = getSavedClips(inputPath, metadataPath);
@@ -258,22 +269,86 @@ router.patch("/:jobId/clips/:clipId/title", (req, res) => {
   });
 });
 
+router.delete("/:jobId/clips/:clipId", (req, res) => {
+  const { jobId, clipId } = req.params;
+
+  if (!isValidJobId(jobId) || !isValidFileName(clipId)) {
+    return res.status(400).json({
+      message: "Invalid job ID or clip ID.",
+    });
+  }
+
+  const { inputPath, outputPath, metadataPath } = getJobPaths(jobId);
+
+  if (!fs.existsSync(inputPath)) {
+    return res.status(404).json({
+      message: "Job does not exist.",
+    });
+  }
+
+  const clips = getSavedClips(inputPath, metadataPath);
+
+  const clipIndex = clips.findIndex((clip) => clip.id === clipId);
+
+  if (clipIndex === -1) {
+    return res.status(404).json({
+      message: "Clip not found.",
+    });
+  }
+
+  const deletedClip = clips[clipIndex];
+
+  const videoPath = path.join(inputPath, path.basename(deletedClip.fileName));
+
+  try {
+    // Delete the real MP4 file.
+    fs.rmSync(videoPath, { force: true });
+
+    // Remove the clip from clips.json.
+    clips.splice(clipIndex, 1);
+
+    writeClipMetadata(metadataPath, clips);
+
+    // Remove an old export so it cannot be downloaded after a clip changed.
+    fs.rmSync(path.join(outputPath, "compiled_video.mp4"), { force: true });
+
+    return res.json({
+      message: "Clip deleted successfully.",
+      id: deletedClip.id,
+    });
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Could not delete clip.";
+
+    return res.status(500).json({
+      message,
+    });
+  }
+});
+
 router.get("/:jobId/clips/:fileName", (req, res) => {
   const { jobId, fileName } = req.params;
 
   if (!isValidJobId(jobId)) {
-    return res.status(400).json({ message: "Invalid job ID." });
+    return res.status(400).json({
+      message: "Invalid job ID.",
+    });
   }
 
   if (!isValidFileName(fileName)) {
-    return res.status(400).json({ message: "Invalid file name." });
+    return res.status(400).json({
+      message: "Invalid file name.",
+    });
   }
 
   const { inputPath } = getJobPaths(jobId);
+
   const filePath = path.join(inputPath, fileName);
 
   if (!fs.existsSync(filePath)) {
-    return res.status(404).json({ message: "Clip not found." });
+    return res.status(404).json({
+      message: "Clip not found.",
+    });
   }
 
   return res.sendFile(filePath);
@@ -294,16 +369,9 @@ router.get("/:jobId/output/:fileName/download", (req, res) => {
     });
   }
 
-  const projectRoot = path.resolve(process.cwd(), "..");
+  const { outputPath } = getJobPaths(jobId);
 
-  const filePath = path.join(
-    projectRoot,
-    "storage",
-    "jobs",
-    jobId,
-    "output",
-    fileName,
-  );
+  const filePath = path.join(outputPath, fileName);
 
   if (!fs.existsSync(filePath)) {
     return res.status(404).json({
@@ -329,16 +397,9 @@ router.get("/:jobId/output/:fileName", (req, res) => {
     });
   }
 
-  const projectRoot = path.resolve(process.cwd(), "..");
+  const { outputPath } = getJobPaths(jobId);
 
-  const filePath = path.join(
-    projectRoot,
-    "storage",
-    "jobs",
-    jobId,
-    "output",
-    fileName,
-  );
+  const filePath = path.join(outputPath, fileName);
 
   if (!fs.existsSync(filePath)) {
     return res.status(404).json({
@@ -347,64 +408,6 @@ router.get("/:jobId/output/:fileName", (req, res) => {
   }
 
   return res.sendFile(filePath);
-});
-router.delete("/:jobId/clips/:clipId", (req, res) => {
-  const { jobId, clipId } = req.params;
-
-  if (!isValidJobId(jobId)) {
-    return res.status(400).json({
-      message: "Invalid job ID.",
-    });
-  }
-
-  const projectRoot = path.resolve(process.cwd(), "..");
-
-  const jobPath = path.join(projectRoot, "storage", "jobs", jobId);
-
-  const inputPath = path.join(jobPath, "input");
-  const outputPath = path.join(jobPath, "output");
-  const metadataPath = path.join(jobPath, "clips.json");
-
-  if (!fs.existsSync(metadataPath)) {
-    return res.status(404).json({
-      message: "Saved clip data was not found.",
-    });
-  }
-
-  try {
-    const clips = JSON.parse(fs.readFileSync(metadataPath, "utf8")) as Clip[];
-
-    const clipIndex = clips.findIndex((clip) => clip.id === clipId);
-
-    if (clipIndex === -1) {
-      return res.status(404).json({
-        message: "Clip was not found.",
-      });
-    }
-
-    const [deletedClip] = clips.splice(clipIndex, 1);
-
-    const videoPath = path.join(inputPath, path.basename(deletedClip.fileName));
-
-    fs.rmSync(videoPath, { force: true });
-
-    fs.writeFileSync(metadataPath, JSON.stringify(clips, null, 2), "utf8");
-
-    // Remove the old export so users do not download an outdated video.
-    fs.rmSync(path.join(outputPath, "compiled_video.mp4"), { force: true });
-
-    return res.json({
-      message: "Clip deleted.",
-      id: deletedClip.id,
-    });
-  } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Could not delete clip.";
-
-    return res.status(500).json({
-      message,
-    });
-  }
 });
 
 export default router;
