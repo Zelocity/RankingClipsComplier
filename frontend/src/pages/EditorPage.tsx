@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 
 import RevealOrderPanel from "../components/editor/RevealOrderPanel";
@@ -12,6 +12,59 @@ import { compileJob } from "../api/clipApi";
 import DraggableItemList from "../components/editor/DraggableItemList";
 import SubmitUrlForm from "../components/editor/SubmitUrlForm";
 import { type Item, useItemList } from "../utils/listUtils";
+
+function getRankedItems(items: Item[], draggedItems: Item[]) {
+  if (draggedItems.length === 0) {
+    return items;
+  }
+
+  const itemsById = new Map(items.map((item) => [item.slotId, item]));
+
+  const rankedItems: Item[] = [];
+  const usedIds = new Set<string>();
+
+  for (const draggedItem of draggedItems) {
+    const currentItem = itemsById.get(draggedItem.slotId);
+
+    if (currentItem && !usedIds.has(currentItem.slotId)) {
+      rankedItems.push(currentItem);
+      usedIds.add(currentItem.slotId);
+    }
+  }
+
+  for (const item of items) {
+    if (!usedIds.has(item.slotId)) {
+      rankedItems.push(item);
+    }
+  }
+
+  return rankedItems;
+}
+
+function syncRevealRankOrder(previousOrder: number[], rankCount: number) {
+  const nextOrder: number[] = [];
+  const usedRanks = new Set<number>();
+
+  for (const rankNumber of previousOrder) {
+    const isValidRank =
+      Number.isInteger(rankNumber) &&
+      rankNumber >= 1 &&
+      rankNumber <= rankCount;
+
+    if (isValidRank && !usedRanks.has(rankNumber)) {
+      nextOrder.push(rankNumber);
+      usedRanks.add(rankNumber);
+    }
+  }
+
+  for (let rankNumber = rankCount; rankNumber >= 1; rankNumber -= 1) {
+    if (!usedRanks.has(rankNumber)) {
+      nextOrder.push(rankNumber);
+    }
+  }
+
+  return nextOrder;
+}
 
 function EditorPage() {
   const { jobId } = useParams<{ jobId: string }>();
@@ -30,74 +83,45 @@ function EditorPage() {
   const [isCompiling, setIsCompiling] = useState(false);
   const [compileError, setCompileError] = useState("");
 
-  // This is the order created by dragging cards around.
+  // The order of cards after the user drags them.
+  // This determines Rank #1, Rank #2, etc.
   const [previewItems, setPreviewItems] = useState<Item[]>([]);
 
-  // This is the separate order used to reveal clips.
-  const [playOrder, setPlayOrder] = useState<string[]>([]);
+  // Example: [4, 3, 1, 2]
+  // This stays the same even when clips change rank.
+  const [revealRankOrder, setRevealRankOrder] = useState<number[]>([]);
 
   const [titleDocument, setTitleDocument] = useState<TitleDocument>(
     createDefaultTitleDocument,
   );
 
   const rankedItems = useMemo(() => {
-    if (previewItems.length === 0) {
-      return itemList;
-    }
-
-    const currentItemsById = new Map(
-      itemList.map((item) => [item.slotId, item]),
-    );
-
-    const orderedItems: Item[] = [];
-    const seenIds = new Set<string>();
-
-    for (const previewItem of previewItems) {
-      const currentItem = currentItemsById.get(previewItem.slotId);
-
-      if (currentItem && !seenIds.has(currentItem.slotId)) {
-        orderedItems.push(currentItem);
-        seenIds.add(currentItem.slotId);
-      }
-    }
-
-    for (const item of itemList) {
-      if (!seenIds.has(item.slotId)) {
-        orderedItems.push(item);
-      }
-    }
-
-    return orderedItems;
+    return getRankedItems(itemList, previewItems);
   }, [itemList, previewItems]);
 
   useEffect(() => {
-    setPlayOrder((previousOrder) => {
-      const availableIds = new Set(rankedItems.map((item) => item.slotId));
+    setRevealRankOrder((previousOrder) => {
+      const nextOrder = syncRevealRankOrder(previousOrder, rankedItems.length);
 
-      // Keep the existing reveal sequence.
-      const keptIds = previousOrder.filter((slotId) =>
-        availableIds.has(slotId),
-      );
-
-      const keptIdSet = new Set(keptIds);
-
-      // Only add newly imported clips to the end of Reveal Order.
-      const newIds = rankedItems
-        .map((item) => item.slotId)
-        .filter((slotId) => !keptIdSet.has(slotId));
-
-      const nextOrder = [...keptIds, ...newIds];
-
-      const didOrderChange =
+      const didChange =
         nextOrder.length !== previousOrder.length ||
-        nextOrder.some((slotId, index) => slotId !== previousOrder[index]);
+        nextOrder.some(
+          (rankNumber, index) => rankNumber !== previousOrder[index],
+        );
 
-      return didOrderChange ? nextOrder : previousOrder;
+      return didChange ? nextOrder : previousOrder;
     });
-  }, [rankedItems]);
+  }, [rankedItems.length]);
 
-  function handleMovePlayOrder(fromIndex: number, direction: -1 | 1) {
-    setPlayOrder((previousOrder) => {
+  // Converts rank numbers into the clips currently occupying those ranks.
+  const clipPlayOrder = useMemo(() => {
+    return revealRankOrder
+      .map((rankNumber) => rankedItems[rankNumber - 1]?.slotId)
+      .filter((slotId): slotId is string => Boolean(slotId));
+  }, [rankedItems, revealRankOrder]);
+
+  function handleMoveRevealOrder(fromIndex: number, direction: -1 | 1) {
+    setRevealRankOrder((previousOrder) => {
       const toIndex = fromIndex + direction;
 
       if (toIndex < 0 || toIndex >= previousOrder.length) {
@@ -129,7 +153,9 @@ function EditorPage() {
       const result = await compileJob(jobId, {
         titleDocument,
         rankedClipIds: rankedItems.map((item) => item.slotId),
-        playOrder,
+
+        // Backend still receives clip IDs.
+        playOrder: clipPlayOrder,
       });
 
       setCompiledVideoUrl(`${result.videoUrl}?v=${Date.now()}`);
@@ -167,8 +193,8 @@ function EditorPage() {
 
         <RevealOrderPanel
           items={rankedItems}
-          playOrder={playOrder}
-          onMove={handleMovePlayOrder}
+          revealRankOrder={revealRankOrder}
+          onMove={handleMoveRevealOrder}
         />
       </aside>
 
@@ -187,7 +213,7 @@ function EditorPage() {
             <div className="flex min-h-[600px] w-full max-w-3xl items-center justify-center rounded-2xl border-2 border-dashed border-slate-600 bg-slate-900 p-6">
               <LivePreview
                 items={rankedItems}
-                playOrder={playOrder}
+                playOrder={clipPlayOrder}
                 titleDocument={titleDocument}
               />
             </div>

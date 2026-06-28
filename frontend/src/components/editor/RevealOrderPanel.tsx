@@ -2,36 +2,42 @@ import type { Item } from "../../utils/listUtils";
 
 type RevealOrderPanelProps = {
   items: Item[];
-  playOrder: string[];
+  revealRankOrder: number[];
   onMove: (fromIndex: number, direction: -1 | 1) => void;
 };
 
-function RevealOrderPanel({ items, playOrder, onMove }: RevealOrderPanelProps) {
-  // Ignore any temporary empty Swapy entries during deletion.
+function RevealOrderPanel({
+  items,
+  revealRankOrder,
+  onMove,
+}: RevealOrderPanelProps) {
   const validItems = items.filter((item): item is Item =>
     Boolean(item && typeof item.slotId === "string"),
   );
 
-  const itemsById = new Map(validItems.map((item) => [item.slotId, item]));
-
-  // Keep valid saved play-order IDs.
-  const validPlayOrder = playOrder.filter((slotId) => itemsById.has(slotId));
-
-  // Add any new clips that are not yet in playOrder.
-  const includedIds = new Set(validPlayOrder);
-
-  const missingIds = validItems
-    .map((item) => item.slotId)
-    .filter((slotId) => !includedIds.has(slotId));
-
-  const resolvedPlayOrder = [...validPlayOrder, ...missingIds];
-
-  const orderedItems = resolvedPlayOrder
-    .map((slotId) => itemsById.get(slotId))
-    .filter((item): item is Item => Boolean(item));
-
-  if (orderedItems.length === 0) {
+  if (validItems.length === 0) {
     return null;
+  }
+
+  const resolvedRevealOrder: number[] = [];
+  const usedRanks = new Set<number>();
+
+  for (const rankNumber of revealRankOrder) {
+    const isValidRank =
+      Number.isInteger(rankNumber) &&
+      rankNumber >= 1 &&
+      rankNumber <= validItems.length;
+
+    if (isValidRank && !usedRanks.has(rankNumber)) {
+      resolvedRevealOrder.push(rankNumber);
+      usedRanks.add(rankNumber);
+    }
+  }
+
+  for (let rankNumber = 1; rankNumber <= validItems.length; rankNumber += 1) {
+    if (!usedRanks.has(rankNumber)) {
+      resolvedRevealOrder.push(rankNumber);
+    }
   }
 
   return (
@@ -39,18 +45,21 @@ function RevealOrderPanel({ items, playOrder, onMove }: RevealOrderPanelProps) {
       <h2 className="text-lg font-bold text-white">Play & Reveal Order</h2>
 
       <p className="mt-1 text-sm text-slate-400">
-        Move ranks up or down to choose which clip plays and reveals next.
+        Choose which rank appears next. This pattern stays the same when a clip
+        changes rank.
       </p>
 
       <div className="mt-3 flex flex-col gap-2">
-        {orderedItems.map((item, playIndex) => {
-          const rankIndex = validItems.findIndex(
-            (rankedItem) => rankedItem.slotId === item.slotId,
-          );
+        {resolvedRevealOrder.map((rankNumber, playIndex) => {
+          const rankedItem = validItems[rankNumber - 1];
+
+          if (!rankedItem) {
+            return null;
+          }
 
           return (
             <div
-              key={item.slotId}
+              key={rankNumber}
               className="flex items-center gap-3 rounded-lg border border-slate-700 bg-slate-800 p-3"
             >
               <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-violet-600 text-sm font-black text-white">
@@ -59,10 +68,12 @@ function RevealOrderPanel({ items, playOrder, onMove }: RevealOrderPanelProps) {
 
               <div className="min-w-0 flex-1">
                 <p className="text-xs font-semibold uppercase text-violet-300">
-                  Rank #{rankIndex + 1}
+                  Reveal Rank #{rankNumber}
                 </p>
 
-                <p className="truncate font-bold text-white">{item.title}</p>
+                <p className="truncate font-bold text-white">
+                  {rankedItem.title}
+                </p>
               </div>
 
               <div className="flex gap-1">
@@ -78,7 +89,7 @@ function RevealOrderPanel({ items, playOrder, onMove }: RevealOrderPanelProps) {
                 <button
                   type="button"
                   onClick={() => onMove(playIndex, 1)}
-                  disabled={playIndex === orderedItems.length - 1}
+                  disabled={playIndex === resolvedRevealOrder.length - 1}
                   className="rounded bg-slate-700 px-2 py-1 text-sm font-bold text-white hover:bg-slate-600 disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   ↓
