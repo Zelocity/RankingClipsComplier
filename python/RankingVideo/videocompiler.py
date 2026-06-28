@@ -1,12 +1,16 @@
 from pathlib import Path
 import argparse
 import json
+import re
+import unicodedata
+from functools import lru_cache
 
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 from moviepy import (
     CompositeVideoClip,
     ImageClip,
+    VideoClip,
     VideoFileClip,
     concatenate_videoclips,
 )
@@ -15,13 +19,38 @@ VIDEO_EXTENSIONS = [".mp4", ".mov", ".mkv", ".webm"]
 
 TARGET_WIDTH = 540
 TARGET_HEIGHT = 960
+EXPORT_SCALE = TARGET_WIDTH / 360
+
+# Matches the Tailwind sizes used by LivePreview.tsx.
+# Tuned against the 360px-wide React preview.
+# Pillow glyphs render slightly smaller/narrower than the browser font.
+TITLE_FONT_SIZE = 33
+RANK_FONT_SIZE = 52
+LABEL_FONT_SIZE = round(14 * EXPORT_SCALE)  # text-sm
+TITLE_TEXT_MAX_WIDTH = 450
+OUTLINE_WIDTH = round(2 * EXPORT_SCALE)     # preview-outline
+SLIDE_DURATION = 0.42
+ANIMATION_FPS = 30
+
+# Segoe UI Emoji renders visually smaller than the bold text font.
+EMOJI_SCALE = 1.28
+
+# Noto Color Emoji uses fixed bitmap strikes in Pillow. Render it at its
+# supported 109px strike, then resize the resulting transparent image.
+NOTO_EMOJI_PATH = (
+    Path(__file__).resolve().parent
+    / "assets"
+    / "fonts"
+    / "NotoColorEmoji.ttf"
+)
+NOTO_EMOJI_NATIVE_SIZE = 109
 
 RANK_COLORS = [
-    (239, 68, 68, 255),     # Red
-    (251, 146, 60, 255),    # Orange
-    (250, 204, 21, 255),    # Yellow
-    (203, 213, 225, 255),   # Light gray
-    (255, 255, 255, 255),   # White
+    (239, 68, 68, 255),     # Tailwind red-500
+    (251, 146, 60, 255),    # Tailwind orange-400
+    (253, 224, 71, 255),    # Tailwind yellow-300
+    (226, 232, 240, 255),   # Tailwind slate-200
+    (255, 255, 255, 255),
 ]
 
 DEFAULT_TITLE_DOCUMENT = {
@@ -29,9 +58,7 @@ DEFAULT_TITLE_DOCUMENT = {
     "content": [
         {
             "type": "paragraph",
-            "attrs": {
-                "textAlign": "center",
-            },
+            "attrs": {"textAlign": "center"},
             "content": [
                 {
                     "type": "text",
@@ -39,9 +66,7 @@ DEFAULT_TITLE_DOCUMENT = {
                     "marks": [
                         {
                             "type": "textStyle",
-                            "attrs": {
-                                "color": "#a78bfa",
-                            },
+                            "attrs": {"color": "#a78bfa"},
                         },
                     ],
                 },
@@ -51,9 +76,7 @@ DEFAULT_TITLE_DOCUMENT = {
                     "marks": [
                         {
                             "type": "textStyle",
-                            "attrs": {
-                                "color": "#ffffff",
-                            },
+                            "attrs": {"color": "#ffffff"},
                         },
                     ],
                 },
@@ -63,25 +86,283 @@ DEFAULT_TITLE_DOCUMENT = {
 }
 
 
-def load_font(font_size: int):
-    font_paths = [
-        Path(r"C:\Windows\Fonts\arialbd.ttf"),
-        Path(r"C:\Windows\Fonts\segoeuib.ttf"),
-        Path(r"C:\Windows\Fonts\impact.ttf"),
-    ]
+@lru_cache(maxsize=32)
+def load_font(font_size: int, italic: bool = False):
+    if italic:
+        font_paths = [
+            Path(r"C:\Windows\Fonts\arialbi.ttf"),
+            Path(r"C:\Windows\Fonts\segoeuiz.ttf"),
+            Path(r"C:\Windows\Fonts\arialbd.ttf"),
+            Path(r"C:\Windows\Fonts\segoeuib.ttf"),
+        ]
+    else:
+        font_paths = [
+            Path(r"C:\Windows\Fonts\seguibl.ttf"),
+            Path(r"C:\Windows\Fonts\segoeuib.ttf"),
+            Path(r"C:\Windows\Fonts\ariblk.ttf"),
+            Path(r"C:\Windows\Fonts\arialbd.ttf"),
+            Path(r"C:\Windows\Fonts\impact.ttf"),
+        ]
 
     for font_path in font_paths:
         if font_path.exists():
-            return ImageFont.truetype(
-                str(font_path),
-                font_size,
-            )
+            return ImageFont.truetype(str(font_path), font_size)
 
     raise FileNotFoundError(
-        "Could not find a bold Windows font. "
-        "Check C:\\Windows\\Fonts for a usable .ttf font."
+        "Could not find a usable bold Windows font in C:\\Windows\\Fonts."
     )
 
+
+@lru_cache(maxsize=1)
+def load_emoji_font():
+    if not NOTO_EMOJI_PATH.exists():
+        raise FileNotFoundError(
+            "Noto Color Emoji was not found. Put NotoColorEmoji.ttf at: "
+            f"{NOTO_EMOJI_PATH}"
+        )
+
+    return ImageFont.truetype(
+        str(NOTO_EMOJI_PATH),
+        NOTO_EMOJI_NATIVE_SIZE,
+    )
+
+def is_emoji_base(character: str) -> bool:
+    codepoint = ord(character)
+
+    return (
+        0x1F000 <= codepoint <= 0x1FAFF
+        or 0x2600 <= codepoint <= 0x27BF
+        or codepoint in {
+            0x00A9,  # ©
+            0x00AE,  # ®
+            0x203C,  # ‼
+            0x2049,  # ⁉
+            0x2122,  # ™
+            0x2139,  # ℹ
+            0x3030,  # 〰
+            0x303D,  # 〽
+            0x3297,  # ㊗
+            0x3299,  # ㊙
+        }
+    )
+
+
+def is_regional_indicator(character: str) -> bool:
+    return 0x1F1E6 <= ord(character) <= 0x1F1FF
+
+
+def is_emoji_modifier(character: str) -> bool:
+    return 0x1F3FB <= ord(character) <= 0x1F3FF
+
+
+def is_variation_selector(character: str) -> bool:
+    return ord(character) in {0xFE0E, 0xFE0F}
+
+
+def consume_emoji_suffix(text: str, index: int):
+    parts = []
+
+    while index < len(text):
+        character = text[index]
+
+        if (
+            is_variation_selector(character)
+            or is_emoji_modifier(character)
+            or ord(character) == 0x20E3
+        ):
+            parts.append(character)
+            index += 1
+            continue
+
+        if (
+            ord(character) == 0x200D
+            and index + 1 < len(text)
+            and is_emoji_base(text[index + 1])
+        ):
+            parts.append(character)
+            parts.append(text[index + 1])
+            index += 2
+
+            extra_parts, index = consume_emoji_suffix(text, index)
+            parts.extend(extra_parts)
+            continue
+
+        break
+
+    return parts, index
+
+
+def split_display_units(text: str):
+    units = []
+    index = 0
+
+    while index < len(text):
+        character = text[index]
+
+        # Keycap emoji such as 1️⃣ or #️⃣.
+        if (
+            character in "#*0123456789"
+            and index + 1 < len(text)
+            and (
+                ord(text[index + 1]) == 0x20E3
+                or (
+                    is_variation_selector(text[index + 1])
+                    and index + 2 < len(text)
+                    and ord(text[index + 2]) == 0x20E3
+                )
+            )
+        ):
+            end = index + 2
+
+            if (
+                index + 1 < len(text)
+                and is_variation_selector(text[index + 1])
+            ):
+                end = index + 3
+
+            units.append((text[index:end], True))
+            index = end
+            continue
+
+        if is_emoji_base(character):
+            parts = [character]
+            index += 1
+
+            # Country flags are one visible emoji made from two regional
+            # indicator characters.
+            if (
+                is_regional_indicator(character)
+                and index < len(text)
+                and is_regional_indicator(text[index])
+            ):
+                parts.append(text[index])
+                index += 1
+
+            extra_parts, index = consume_emoji_suffix(text, index)
+            parts.extend(extra_parts)
+
+            units.append(("".join(parts), True))
+            continue
+
+        units.append((character, False))
+        index += 1
+
+    return units
+
+
+def split_emoji_runs(text: str):
+    runs = []
+
+    for unit, is_emoji in split_display_units(text):
+        if runs and runs[-1][1] == is_emoji:
+            runs[-1] = (runs[-1][0] + unit, is_emoji)
+        else:
+            runs.append((unit, is_emoji))
+
+    return runs
+
+
+def font_size_of(font) -> int:
+    size = getattr(font, "size", None)
+
+    if isinstance(size, int):
+        return size
+
+    return LABEL_FONT_SIZE
+
+
+def emoji_target_height(font) -> int:
+    return max(
+        1,
+        round(font_size_of(font) * EMOJI_SCALE),
+    )
+
+
+@lru_cache(maxsize=512)
+def render_noto_emoji(emoji_text: str, target_height: int):
+    emoji_font = load_emoji_font()
+
+    # Draw at Noto's native strike first. This avoids the Pillow
+    # "invalid pixel size" error from trying to load it at arbitrary sizes.
+    margin = 16
+    measure_image = Image.new(
+        "RGBA",
+        (
+            NOTO_EMOJI_NATIVE_SIZE * 4,
+            NOTO_EMOJI_NATIVE_SIZE + margin * 2,
+        ),
+        (0, 0, 0, 0),
+    )
+    measure_draw = ImageDraw.Draw(measure_image)
+
+    bbox = measure_draw.textbbox(
+        (margin, margin),
+        emoji_text,
+        font=emoji_font,
+        embedded_color=True,
+    )
+
+    if bbox is None:
+        return Image.new("RGBA", (1, 1), (0, 0, 0, 0))
+
+    image_width = max(1, bbox[2] - bbox[0] + margin * 2)
+    image_height = max(1, bbox[3] - bbox[1] + margin * 2)
+
+    emoji_image = Image.new(
+        "RGBA",
+        (image_width, image_height),
+        (0, 0, 0, 0),
+    )
+    emoji_draw = ImageDraw.Draw(emoji_image)
+
+    emoji_draw.text(
+        (margin - bbox[0], margin - bbox[1]),
+        emoji_text,
+        font=emoji_font,
+        embedded_color=True,
+    )
+
+    alpha_bbox = emoji_image.getbbox()
+
+    if alpha_bbox is not None:
+        emoji_image = emoji_image.crop(alpha_bbox)
+
+    if emoji_image.height <= 0:
+        return Image.new("RGBA", (1, 1), (0, 0, 0, 0))
+
+    scaled_width = max(
+        1,
+        round(
+            emoji_image.width
+            * target_height
+            / emoji_image.height
+        ),
+    )
+
+    return emoji_image.resize(
+        (scaled_width, target_height),
+        Image.Resampling.LANCZOS,
+    )
+
+
+def get_emoji_y(
+    draw,
+    text_y: int,
+    text_font,
+    emoji_height: int,
+    stroke_width: int,
+) -> int:
+    # Center the resized Noto bitmap against the outlined text glyphs.
+    _, text_top, _, text_bottom = draw.textbbox(
+        (0, 0),
+        "Ag",
+        font=text_font,
+        stroke_width=stroke_width,
+    )
+
+    text_center = (text_top + text_bottom) / 2
+
+    return round(text_y + text_center - emoji_height / 2)
 
 def hex_to_rgba(value: str):
     clean_value = value.strip().lstrip("#")
@@ -90,11 +371,12 @@ def hex_to_rgba(value: str):
         return (255, 255, 255, 255)
 
     try:
-        red = int(clean_value[0:2], 16)
-        green = int(clean_value[2:4], 16)
-        blue = int(clean_value[4:6], 16)
-
-        return (red, green, blue, 255)
+        return (
+            int(clean_value[0:2], 16),
+            int(clean_value[2:4], 16),
+            int(clean_value[4:6], 16),
+            255,
+        )
     except ValueError:
         return (255, 255, 255, 255)
 
@@ -120,23 +402,33 @@ def format_vertical(
     )
 
 
-def text_width(draw, text: str, font, stroke_width: int) -> int:
-    left, _, right, _ = draw.textbbox(
-        (0, 0),
-        text,
-        font=font,
-        stroke_width=stroke_width,
-    )
+def text_width(draw, text: str, font) -> int:
+    total_width = 0
 
-    return right - left
+    for run, is_emoji in split_emoji_runs(text):
+        if is_emoji:
+            emoji_image = render_noto_emoji(
+                run,
+                emoji_target_height(font),
+            )
+            total_width += emoji_image.width
+        else:
+            total_width += round(
+                draw.textlength(
+                    run,
+                    font=font,
+                )
+            )
+
+    return total_width
 
 
-def text_height(draw, text: str, font, stroke_width: int) -> int:
+def text_height(draw, font) -> int:
     _, top, _, bottom = draw.textbbox(
         (0, 0),
-        text,
+        "Ag",
         font=font,
-        stroke_width=stroke_width,
+        stroke_width=OUTLINE_WIDTH,
     )
 
     return bottom - top
@@ -149,55 +441,64 @@ def draw_outlined_text(
     text: str,
     font,
     fill,
-    stroke_width: int,
+    stroke_width: int = OUTLINE_WIDTH,
 ):
     if not text:
         return
 
-    shadow_offset = max(3, stroke_width)
+    current_x = x
 
-    draw.text(
-        (x + shadow_offset, y + shadow_offset),
-        text,
-        font=font,
-        fill=(0, 0, 0, 220),
-        stroke_width=stroke_width,
-        stroke_fill=(0, 0, 0, 255),
-    )
+    for run, is_emoji in split_emoji_runs(text):
+        if is_emoji:
+            emoji_image = render_noto_emoji(
+                run,
+                emoji_target_height(font),
+            )
 
-    draw.text(
-        (x, y),
-        text,
-        font=font,
-        fill=fill,
-        stroke_width=stroke_width,
-        stroke_fill=(0, 0, 0, 255),
-    )
+            emoji_y = get_emoji_y(
+                draw=draw,
+                text_y=y,
+                text_font=font,
+                emoji_height=emoji_image.height,
+                stroke_width=stroke_width,
+            )
 
+            # The overlay canvas is RGBA. Alpha-compositing preserves Noto's
+            # built-in color bitmap while keeping its background transparent.
+            draw._image.alpha_composite(
+                emoji_image,
+                (round(current_x), emoji_y),
+            )
 
-def truncate_text(
-    draw,
-    text: str,
-    font,
-    stroke_width: int,
-    max_width: int,
-) -> str:
-    if text_width(draw, text, font, stroke_width) <= max_width:
-        return text
+            current_x += emoji_image.width
+            continue
 
-    suffix = "..."
-    shortened = text
+        # Closely matches .preview-outline:
+        # four-way outline plus a dark downwards shadow.
+        draw.text(
+            (current_x, y + round(4 * EXPORT_SCALE)),
+            run,
+            font=font,
+            fill=(0, 0, 0, 190),
+            stroke_width=stroke_width,
+            stroke_fill=(0, 0, 0, 190),
+        )
 
-    while shortened:
-        candidate = f"{shortened}{suffix}"
+        draw.text(
+            (current_x, y),
+            run,
+            font=font,
+            fill=fill,
+            stroke_width=stroke_width,
+            stroke_fill=(0, 0, 0, 255),
+        )
 
-        if text_width(draw, candidate, font, stroke_width) <= max_width:
-            return candidate
-
-        shortened = shortened[:-1]
-
-    return suffix
-
+        current_x += round(
+            draw.textlength(
+                run,
+                font=font,
+            )
+        )
 
 def get_node_color(node):
     marks = node.get("marks", [])
@@ -206,23 +507,34 @@ def get_node_color(node):
         return (255, 255, 255, 255)
 
     for mark in marks:
-        if not isinstance(mark, dict):
-            continue
-
-        if mark.get("type") != "textStyle":
+        if not isinstance(mark, dict) or mark.get("type") != "textStyle":
             continue
 
         attrs = mark.get("attrs", {})
-
-        if not isinstance(attrs, dict):
-            continue
-
-        color = attrs.get("color")
+        color = attrs.get("color") if isinstance(attrs, dict) else None
 
         if isinstance(color, str):
             return hex_to_rgba(color)
 
     return (255, 255, 255, 255)
+
+
+def get_text_style(node):
+    marks = node.get("marks", [])
+
+    if not isinstance(marks, list):
+        return False, False
+
+    is_bold = any(
+        isinstance(mark, dict) and mark.get("type") == "bold"
+        for mark in marks
+    )
+    is_italic = any(
+        isinstance(mark, dict) and mark.get("type") == "italic"
+        for mark in marks
+    )
+
+    return is_bold, is_italic
 
 
 def get_title_paragraphs(title_document):
@@ -237,186 +549,198 @@ def get_title_paragraphs(title_document):
     paragraphs = []
 
     for block in raw_content:
-        if not isinstance(block, dict):
-            continue
-
-        if block.get("type") != "paragraph":
+        if not isinstance(block, dict) or block.get("type") != "paragraph":
             continue
 
         attrs = block.get("attrs", {})
+        alignment = attrs.get("textAlign") if isinstance(attrs, dict) else "center"
 
-        if not isinstance(attrs, dict):
-            attrs = {}
-
-        alignment = attrs.get("textAlign", "center")
-
-        if alignment not in ["left", "center", "right"]:
+        if alignment not in {"left", "center", "right"}:
             alignment = "center"
 
-        raw_parts = block.get("content", [])
+        parts = []
 
-        if not isinstance(raw_parts, list):
-            raw_parts = []
-
-        segments = []
-
-        for node in raw_parts:
+        for node in block.get("content", []):
             if not isinstance(node, dict):
+                continue
+
+            if node.get("type") == "hardBreak":
+                parts.append(("break", "", (255, 255, 255, 255), False, False))
                 continue
 
             if node.get("type") != "text":
                 continue
 
-            raw_text = node.get("text", "")
+            text = node.get("text", "")
 
-            if not isinstance(raw_text, str):
+            if not isinstance(text, str):
                 continue
 
-            segments.append(
+            bold, italic = get_text_style(node)
+
+            parts.append(
                 (
-                    raw_text.upper(),
+                    "text",
+                    text.upper(),
                     get_node_color(node),
+                    bold,
+                    italic,
                 )
             )
 
-        paragraphs.append(
-            {
-                "alignment": alignment,
-                "segments": segments,
-            }
-        )
+        paragraphs.append({"alignment": alignment, "parts": parts})
 
     if paragraphs:
         return paragraphs
 
-    return [
-        {
-            "alignment": "center",
-            "segments": [
-                ("RANKING ", (167, 139, 250, 255)),
-                ("THE BEST MOMENTS", (255, 255, 255, 255)),
-            ],
-        },
-    ]
+    return get_title_paragraphs(DEFAULT_TITLE_DOCUMENT)
 
 
-def create_overlay_layout(
-    draw,
-    width: int,
-    height: int,
-    title_document,
-    rank_count: int,
-):
-    title_font = load_font(max(18, int(width * 0.068)))
-    title_stroke = max(2, width // 360)
-    rank_stroke = max(2, width // 300)
+def font_for_title(is_italic: bool):
+    return load_font(TITLE_FONT_SIZE, italic=is_italic)
 
-    title_paragraphs = get_title_paragraphs(title_document)
 
-    title_line_height = text_height(
+def make_title_lines(draw, title_document, max_width: int):
+    visual_lines = []
+
+    for paragraph in get_title_paragraphs(title_document):
+        alignment = paragraph["alignment"]
+        current_line = []
+        pending_space = False
+
+        def line_width(segments):
+            width = sum(
+                text_width(draw, text, font_for_title(italic))
+                for text, _, _, italic in segments
+            )
+
+            return width + OUTLINE_WIDTH * 2
+
+        def push_line():
+            nonlocal current_line, pending_space
+
+            visual_lines.append(
+                {
+                    "alignment": alignment,
+                    "segments": current_line,
+                }
+            )
+
+            current_line = []
+            pending_space = False
+
+        for kind, value, color, bold, italic in paragraph["parts"]:
+            if kind == "break":
+                push_line()
+                continue
+
+            tokens = re.findall(r"\S+|\s+", value)
+
+            for token in tokens:
+                if token.isspace():
+                    if current_line:
+                        pending_space = True
+                    continue
+
+                prefix = " " if pending_space and current_line else ""
+                candidate = current_line + [(prefix + token, color, bold, italic)]
+
+                if current_line and line_width(candidate) > max_width:
+                    push_line()
+                    current_line = [(token, color, bold, italic)]
+                else:
+                    current_line = candidate
+
+                pending_space = False
+
+        push_line()
+
+    if visual_lines:
+        return visual_lines
+
+    return [{"alignment": "center", "segments": []}]
+
+
+def create_title_layout(draw, width: int, title_document):
+    horizontal_padding = round(16 * EXPORT_SCALE)  # px-4
+    top_padding = round(16 * EXPORT_SCALE)         # pt-4
+    bottom_padding = round(56 * EXPORT_SCALE)      # pb-14
+
+    # React wraps this heading after "THE BEST" at the 360px preview width.
+    # Pillow's font metrics are narrower, so cap the usable line width to
+    # preserve the same visual wrap in the exported 540px video.
+    lines = make_title_lines(
         draw,
-        "Ag",
-        title_font,
-        title_stroke,
-    ) + int(width * 0.012)
-
-    title_area_height = (
-        int(height * 0.03)
-        + title_line_height * len(title_paragraphs)
-        + int(height * 0.035)
+        title_document,
+        min(
+            width - horizontal_padding * 2,
+            TITLE_TEXT_MAX_WIDTH,
+        ),
     )
 
-    title_area_height = min(
-        title_area_height,
-        int(height * 0.34),
-    )
-
-    list_top = title_area_height + int(height * 0.02)
-    list_bottom = int(height * 0.83)
-
-    available_height = max(1, list_bottom - list_top)
-    row_height = max(28, available_height // max(1, rank_count))
-
-    rank_number_font = load_font(
-        max(
-            16,
-            min(
-                int(width * 0.13),
-                int(row_height * 0.88),
-            ),
-        )
-    )
-
-    rank_label_font = load_font(
-        max(
-            12,
-            min(
-                int(width * 0.055),
-                int(row_height * 0.52),
-            ),
-        )
-    )
+    line_height = round(TITLE_FONT_SIZE * 1.25)  # leading-tight
 
     return {
-        "title_font": title_font,
-        "title_stroke": title_stroke,
-        "title_paragraphs": title_paragraphs,
-        "title_line_height": title_line_height,
-        "title_area_height": title_area_height,
-        "rank_stroke": rank_stroke,
-        "rank_number_font": rank_number_font,
-        "rank_label_font": rank_label_font,
-        "rank_number_x": int(width * 0.05),
-        "rank_label_x": int(width * 0.22),
-        "list_top": list_top,
-        "row_height": row_height,
+        "lines": lines,
+        "horizontal_padding": horizontal_padding,
+        "top_padding": top_padding,
+        "line_height": line_height,
+        "gradient_height": (
+            top_padding
+            + len(lines) * line_height
+            + bottom_padding
+        ),
     }
 
 
-def draw_title_document(
-    draw,
-    image_width: int,
-    y: int,
-    title_document,
-    font,
-    stroke_width: int,
-):
-    paragraphs = get_title_paragraphs(title_document)
+def draw_top_gradient(image: Image.Image, gradient_height: int):
+    width, _ = image.size
+    gradient_height = max(1, gradient_height)
 
-    horizontal_padding = int(image_width * 0.04)
+    alpha = np.zeros((gradient_height, width), dtype=np.uint8)
 
-    line_height = text_height(
-        draw,
-        "Ag",
-        font,
-        stroke_width,
-    ) + int(image_width * 0.012)
+    for y in range(gradient_height):
+        progress = y / max(gradient_height - 1, 1)
 
-    current_y = y
+        if progress <= 0.5:
+            local_progress = progress / 0.5
+            opacity = round(230 + (140 - 230) * local_progress)
+        else:
+            local_progress = (progress - 0.5) / 0.5
+            opacity = round(140 * (1 - local_progress))
 
-    for paragraph in paragraphs:
-        segments = paragraph["segments"]
+        alpha[y, :] = opacity
+
+    gradient = np.zeros((gradient_height, width, 4), dtype=np.uint8)
+    gradient[:, :, 3] = alpha
+
+    image.alpha_composite(Image.fromarray(gradient, "RGBA"), (0, 0))
+
+
+def draw_title_document(draw, width: int, title_document):
+    layout = create_title_layout(draw, width, title_document)
+    current_y = layout["top_padding"]
+
+    for line in layout["lines"]:
+        segments = line["segments"]
 
         total_width = sum(
-            text_width(
-                draw,
-                text,
-                font,
-                stroke_width,
-            )
-            for text, _ in segments
+            text_width(draw, text, font_for_title(italic))
+            for text, _, _, italic in segments
         )
 
-        alignment = paragraph["alignment"]
+        alignment = line["alignment"]
 
         if alignment == "left":
-            current_x = horizontal_padding
+            current_x = layout["horizontal_padding"]
         elif alignment == "right":
-            current_x = image_width - horizontal_padding - total_width
+            current_x = width - layout["horizontal_padding"] - total_width
         else:
-            current_x = (image_width - total_width) // 2
+            current_x = (width - total_width) // 2
 
-        for text, color in segments:
+        for text, color, _, italic in segments:
+            font = font_for_title(italic)
+
             draw_outlined_text(
                 draw=draw,
                 x=current_x,
@@ -424,17 +748,11 @@ def draw_title_document(
                 text=text,
                 font=font,
                 fill=color,
-                stroke_width=stroke_width,
             )
 
-            current_x += text_width(
-                draw,
-                text,
-                font,
-                stroke_width,
-            )
+            current_x += text_width(draw, text, font)
 
-        current_y += line_height
+        current_y += layout["line_height"]
 
 
 def rank_color(index: int):
@@ -444,125 +762,188 @@ def rank_color(index: int):
     return (255, 255, 255, 255)
 
 
-def create_ranking_overlay(
+def create_rank_layout():
+    # Scaled from:
+    # left-3 top-16 w-[88%] px-1 py-0.5 gap-2 gap-1 min-w-8
+    list_left = round(12 * EXPORT_SCALE)
+    list_top = round(64 * EXPORT_SCALE)
+    list_width = round(360 * 0.88 * EXPORT_SCALE)
+
+    row_horizontal_padding = round(4 * EXPORT_SCALE)
+    row_vertical_padding = round(2 * EXPORT_SCALE)
+    item_gap = round(8 * EXPORT_SCALE)
+    row_gap = round(4 * EXPORT_SCALE)
+    number_min_width = round(32 * EXPORT_SCALE)
+
+    number_line_height = RANK_FONT_SIZE  # leading-none
+    row_height = number_line_height + row_vertical_padding * 2
+
+    return {
+        "list_top": list_top,
+        "row_horizontal_padding": row_horizontal_padding,
+        "row_vertical_padding": row_vertical_padding,
+        "item_gap": item_gap,
+        "row_gap": row_gap,
+        "number_min_width": number_min_width,
+        "row_height": row_height,
+        "row_step": row_height + row_gap,
+        "number_x": list_left + row_horizontal_padding,
+        "label_x": (
+            list_left
+            + row_horizontal_padding
+            + number_min_width
+            + item_gap
+        ),
+        "label_max_width": (
+            list_width
+            - row_horizontal_padding * 2
+            - number_min_width
+            - item_gap
+        ),
+    }
+
+
+def truncate_text(draw, text: str, font, max_width: int) -> str:
+    if text_width(draw, text, font) <= max_width:
+        return text
+
+    suffix = "..."
+    units = split_display_units(text)
+
+    while units:
+        candidate = f"{''.join(unit for unit, _ in units)}{suffix}"
+
+        if text_width(draw, candidate, font) <= max_width:
+            return candidate
+
+        units.pop()
+
+    return suffix
+
+
+def draw_rank_number(draw, layout, index: int, row_y: int):
+    draw_outlined_text(
+        draw=draw,
+        x=layout["number_x"],
+        y=row_y + layout["row_vertical_padding"],
+        text=f"{index + 1}.",
+        font=load_font(RANK_FONT_SIZE, italic=True),
+        fill=rank_color(index),
+    )
+
+
+def draw_rank_label(
+    draw,
+    layout,
+    row_y: int,
+    text: str,
+    is_active: bool,
+):
+    font = load_font(LABEL_FONT_SIZE)
+
+    label = truncate_text(
+        draw=draw,
+        text=text.upper(),
+        font=font,
+        max_width=layout["label_max_width"],
+    )
+
+    label_height = text_height(draw, font)
+
+    label_y = row_y + (
+        layout["row_height"] - label_height
+    ) // 2
+
+    draw_outlined_text(
+        draw=draw,
+        x=layout["label_x"],
+        y=label_y,
+        text=label,
+        font=font,
+        fill=(255, 255, 255, 255)
+        if is_active
+        else (226, 232, 240, 255),
+    )
+
+
+def create_static_overlay(
     width: int,
     height: int,
     title_document,
     ranked_clips,
-    revealed_clip_ids: set[str],
-    active_clip_id: str,
-) -> np.ndarray:
+    visible_past_ids: set[str],
+):
     overlay = Image.new("RGBA", (width, height), (0, 0, 0, 0))
     draw = ImageDraw.Draw(overlay)
 
-    layout = create_overlay_layout(
-        draw=draw,
-        width=width,
-        height=height,
-        title_document=title_document,
-        rank_count=len(ranked_clips),
-    )
+    title_layout = create_title_layout(draw, width, title_document)
 
-    # This is the only black background panel.
-    # It stays behind the overall title at the top.
-    draw.rectangle(
-        (
-            0,
-            0,
-            width,
-            layout["title_area_height"],
-        ),
-        fill=(0, 0, 0, 180),
-    )
+    # Keeps the top title gradient from React. There are no per-rank boxes.
+    draw_top_gradient(overlay, title_layout["gradient_height"])
 
-    draw_title_document(
-        draw=draw,
-        image_width=width,
-        y=int(height * 0.02),
-        title_document=title_document,
-        font=layout["title_font"],
-        stroke_width=layout["title_stroke"],
-    )
+    draw = ImageDraw.Draw(overlay)
+    draw_title_document(draw, width, title_document)
 
-    max_label_width = int(width * 0.72)
+    rank_layout = create_rank_layout()
 
     for index, clip_info in enumerate(ranked_clips):
-        row_y = layout["list_top"] + index * layout["row_height"]
-        clip_id = clip_info["id"]
+        row_y = rank_layout["list_top"] + index * rank_layout["row_step"]
 
-        draw_outlined_text(
-            draw=draw,
-            x=layout["rank_number_x"],
-            y=row_y,
-            text=f"{index + 1}.",
-            font=layout["rank_number_font"],
-            fill=rank_color(index),
-            stroke_width=layout["rank_stroke"],
-        )
+        draw_rank_number(draw, rank_layout, index, row_y)
 
-        # Future titles are blank.
-        if clip_id not in revealed_clip_ids:
-            continue
-
-        # Current title is drawn separately as an animated layer.
-        if clip_id == active_clip_id:
-            continue
-
-        label = truncate_text(
-            draw=draw,
-            text=clip_info["title"].upper(),
-            font=layout["rank_label_font"],
-            stroke_width=layout["rank_stroke"],
-            max_width=max_label_width,
-        )
-
-        draw_outlined_text(
-            draw=draw,
-            x=layout["rank_label_x"],
-            y=row_y + int(layout["row_height"] * 0.18),
-            text=label,
-            font=layout["rank_label_font"],
-            fill=(255, 255, 255, 255),
-            stroke_width=layout["rank_stroke"],
-        )
-
-    active_rank_index = next(
-        (
-            index
-            for index, clip_info in enumerate(ranked_clips)
-            if clip_info["id"] == active_clip_id
-        ),
-        0,
-    )
-
-    draw_outlined_text(
-        draw=draw,
-        x=int(width * 0.04),
-        y=int(height * 0.86),
-        text=f"#{active_rank_index + 1}",
-        font=load_font(max(28, int(width * 0.16))),
-        fill=(255, 255, 255, 255),
-        stroke_width=max(3, width // 260),
-    )
+        if clip_info["id"] in visible_past_ids:
+            draw_rank_label(
+                draw=draw,
+                layout=rank_layout,
+                row_y=row_y,
+                text=clip_info["title"],
+                is_active=False,
+            )
 
     return np.array(overlay)
 
 
-def ease_out_cubic(progress: float) -> float:
+def cubic_bezier_ease(progress: float) -> float:
+    # React animation:
+    # cubic-bezier(0.18, 0.9, 0.25, 1)
     progress = max(0.0, min(progress, 1.0))
+    x1, y1, x2, y2 = 0.18, 0.9, 0.25, 1.0
 
-    return 1 - (1 - progress) ** 3
+    def coordinate(t, first, second):
+        inverse = 1 - t
+
+        return (
+            3 * inverse * inverse * t * first
+            + 3 * inverse * t * t * second
+            + t * t * t
+        )
+
+    low = 0.0
+    high = 1.0
+
+    for _ in range(16):
+        midpoint = (low + high) / 2
+
+        if coordinate(midpoint, x1, x2) < progress:
+            low = midpoint
+        else:
+            high = midpoint
+
+    return coordinate((low + high) / 2, y1, y2)
 
 
-def create_sliding_active_title_clip(
+def create_active_title_frame(
     width: int,
     height: int,
-    title_document,
     ranked_clips,
     active_clip_id: str,
-    duration: float,
+    progress: float,
+    opacity: float,
 ):
-    active_rank_index = next(
+    frame = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(frame)
+
+    active_index = next(
         (
             index
             for index, clip_info in enumerate(ranked_clips)
@@ -571,107 +952,132 @@ def create_sliding_active_title_clip(
         None,
     )
 
-    if active_rank_index is None:
-        return None
+    if active_index is None:
+        return np.array(frame)
 
-    measure_image = Image.new(
-        "RGBA",
-        (width, height),
-        (0, 0, 0, 0),
-    )
-    measure_draw = ImageDraw.Draw(measure_image)
-
-    layout = create_overlay_layout(
-        draw=measure_draw,
-        width=width,
-        height=height,
-        title_document=title_document,
-        rank_count=len(ranked_clips),
-    )
-
-    active_clip = ranked_clips[active_rank_index]
+    rank_layout = create_rank_layout()
+    font = load_font(LABEL_FONT_SIZE)
 
     label = truncate_text(
-        draw=measure_draw,
-        text=active_clip["title"].upper(),
-        font=layout["rank_label_font"],
-        stroke_width=layout["rank_stroke"],
-        max_width=int(width * 0.72),
+        draw=draw,
+        text=ranked_clips[active_index]["title"].upper(),
+        font=font,
+        max_width=rank_layout["label_max_width"],
     )
 
-    label_width = text_width(
-        measure_draw,
-        label,
-        layout["rank_label_font"],
-        layout["rank_stroke"],
-    )
+    label_width = text_width(draw, label, font)
+    label_height = text_height(draw, font)
 
-    label_height = text_height(
-        measure_draw,
-        label,
-        layout["rank_label_font"],
-        layout["rank_stroke"],
-    )
+    row_y = rank_layout["list_top"] + active_index * rank_layout["row_step"]
 
-    padding = layout["rank_stroke"] + 8
+    final_x = rank_layout["label_x"]
+    final_y = row_y + (
+        rank_layout["row_height"] - label_height
+    ) // 2
 
-    # Transparent image: no black box behind the clip title.
-    title_image = Image.new(
-        "RGBA",
-        (
-            label_width + padding * 2,
-            label_height + padding * 2,
-        ),
-        (0, 0, 0, 0),
-    )
-
-    title_draw = ImageDraw.Draw(title_image)
+    # React: transform: translateX(-120%).
+    start_x = final_x - round(label_width * 1.2)
+    current_x = round(start_x + (final_x - start_x) * progress)
 
     draw_outlined_text(
-        draw=title_draw,
-        x=padding,
-        y=padding,
+        draw=draw,
+        x=current_x,
+        y=final_y,
         text=label,
-        font=layout["rank_label_font"],
+        font=font,
         fill=(255, 255, 255, 255),
-        stroke_width=layout["rank_stroke"],
     )
 
-    row_y = (
-        layout["list_top"]
-        + active_rank_index * layout["row_height"]
+    if opacity < 1:
+        frame_data = np.array(frame)
+        frame_data[:, :, 3] = (
+            frame_data[:, :, 3].astype(np.float32) * opacity
+        ).astype(np.uint8)
+        return frame_data
+
+    return np.array(frame)
+
+
+def create_animated_title_clip(
+    width: int,
+    height: int,
+    ranked_clips,
+    active_clip_id: str,
+    clip_duration: float,
+):
+    animation_duration = min(SLIDE_DURATION, clip_duration)
+
+    if animation_duration <= 0:
+        return None, None
+
+    max_frame_index = max(
+        0,
+        int(round(animation_duration * ANIMATION_FPS)),
     )
 
-    final_x = layout["rank_label_x"] - padding
-    final_y = (
-        row_y
-        + int(layout["row_height"] * 0.18)
-        - padding
-    )
-
-    # Start at the left edge instead of fully off-screen.
-    # This avoids MoviePy's negative-position broadcast error.
-    start_x = 0
-
-    slide_duration = min(0.42, max(0.01, duration))
-
-    def get_position(time: float):
-        progress = ease_out_cubic(time / slide_duration)
-
-        current_x = start_x + (
-            final_x - start_x
-        ) * progress
-
-        return (int(current_x), final_y)
-
-    return (
-        ImageClip(
-            np.array(title_image),
-            transparent=True,
+    @lru_cache(maxsize=max_frame_index + 2)
+    def get_frame(frame_index: int):
+        time = min(
+            frame_index / ANIMATION_FPS,
+            animation_duration,
         )
-        .with_duration(duration)
-        .with_position(get_position)
+
+        raw_progress = time / animation_duration
+
+        return create_active_title_frame(
+            width=width,
+            height=height,
+            ranked_clips=ranked_clips,
+            active_clip_id=active_clip_id,
+            progress=cubic_bezier_ease(raw_progress),
+            opacity=raw_progress,
+        )
+
+    def frame_index_from_time(time: float):
+        return min(
+            max_frame_index,
+            max(0, int(round(time * ANIMATION_FPS))),
+        )
+
+    animated_rgb = VideoClip(
+        frame_function=lambda time: get_frame(
+            frame_index_from_time(time)
+        )[:, :, :3],
+        duration=animation_duration,
     )
+
+    animated_mask = VideoClip(
+        frame_function=lambda time: (
+            get_frame(frame_index_from_time(time))[:, :, 3].astype(np.float32)
+            / 255.0
+        ),
+        is_mask=True,
+        duration=animation_duration,
+    )
+
+    animated_clip = animated_rgb.with_mask(animated_mask)
+
+    final_frame = create_active_title_frame(
+        width=width,
+        height=height,
+        ranked_clips=ranked_clips,
+        active_clip_id=active_clip_id,
+        progress=1.0,
+        opacity=1.0,
+    )
+
+    remaining_duration = clip_duration - animation_duration
+
+    static_clip = None
+
+    if remaining_duration > 0:
+        static_clip = (
+            ImageClip(final_frame, transparent=True)
+            .with_start(animation_duration)
+            .with_duration(remaining_duration)
+        )
+
+    return animated_clip, static_clip
 
 
 def add_ranking_overlay(
@@ -681,36 +1087,36 @@ def add_ranking_overlay(
     revealed_clip_ids: set[str],
     active_clip_id: str,
 ):
-    overlay_image = create_ranking_overlay(
-        width=int(clip.w),
-        height=int(clip.h),
-        title_document=title_document,
-        ranked_clips=ranked_clips,
-        revealed_clip_ids=revealed_clip_ids,
-        active_clip_id=active_clip_id,
-    )
+    # The active title is rendered separately as an animated transparent layer.
+    visible_past_ids = set(revealed_clip_ids)
+    visible_past_ids.discard(active_clip_id)
 
-    static_overlay_clip = ImageClip(
-        overlay_image,
+    static_overlay = ImageClip(
+        create_static_overlay(
+            width=int(clip.w),
+            height=int(clip.h),
+            title_document=title_document,
+            ranked_clips=ranked_clips,
+            visible_past_ids=visible_past_ids,
+        ),
         transparent=True,
     ).with_duration(clip.duration)
 
-    sliding_title_clip = create_sliding_active_title_clip(
+    animated_title, static_active_title = create_animated_title_clip(
         width=int(clip.w),
         height=int(clip.h),
-        title_document=title_document,
         ranked_clips=ranked_clips,
         active_clip_id=active_clip_id,
-        duration=clip.duration,
+        clip_duration=clip.duration,
     )
 
-    layers = [
-        clip,
-        static_overlay_clip,
-    ]
+    layers = [clip, static_overlay]
 
-    if sliding_title_clip is not None:
-        layers.append(sliding_title_clip)
+    if animated_title is not None:
+        layers.append(animated_title)
+
+    if static_active_title is not None:
+        layers.append(static_active_title)
 
     return CompositeVideoClip(
         layers,
@@ -730,12 +1136,12 @@ def read_render_config(config_path: str | None):
         )
 
     with path.open("r", encoding="utf-8") as config_file:
-        loaded_config = json.load(config_file)
+        config = json.load(config_file)
 
-    if not isinstance(loaded_config, dict):
+    if not isinstance(config, dict):
         raise ValueError("Render config must be a JSON object.")
 
-    return loaded_config
+    return config
 
 
 def create_fallback_clips(input_path: Path):
@@ -767,21 +1173,18 @@ def get_config_clips(config, input_path: Path):
         file_name = raw_clip.get("fileName")
         title = raw_clip.get("title")
 
-        if not isinstance(clip_id, str):
-            continue
-
-        if not isinstance(file_name, str):
+        if not isinstance(clip_id, str) or not isinstance(file_name, str):
             continue
 
         safe_file_name = Path(file_name).name
+        file_path = input_path / safe_file_name
 
-        if not safe_file_name:
-            continue
-
-        if Path(safe_file_name).suffix.lower() not in VIDEO_EXTENSIONS:
-            continue
-
-        if not (input_path / safe_file_name).exists():
+        if (
+            not safe_file_name
+            or safe_file_name != file_name
+            or file_path.suffix.lower() not in VIDEO_EXTENSIONS
+            or not file_path.exists()
+        ):
             continue
 
         clips.append(
@@ -789,9 +1192,9 @@ def get_config_clips(config, input_path: Path):
                 "id": clip_id,
                 "fileName": safe_file_name,
                 "title": (
-                    title
+                    title.strip()
                     if isinstance(title, str) and title.strip()
-                    else Path(safe_file_name).stem
+                    else file_path.stem
                 ),
             }
         )
@@ -799,11 +1202,7 @@ def get_config_clips(config, input_path: Path):
     return clips or create_fallback_clips(input_path)
 
 
-def resolve_clip_order(
-    requested_ids,
-    clip_by_id,
-    fallback_clips,
-):
+def resolve_clip_order(requested_ids, clip_by_id, fallback_clips):
     ordered_clips = []
     included_ids = set()
 
@@ -829,18 +1228,14 @@ def compile_videos(
     input_dir: str,
     output_dir: str,
     config_path: str | None = None,
-) -> None:
+):
     input_path = Path(input_dir)
     output_path = Path(output_dir)
-
     output_path.mkdir(parents=True, exist_ok=True)
 
     render_config = read_render_config(config_path)
 
-    saved_clips = get_config_clips(
-        render_config,
-        input_path,
-    )
+    saved_clips = get_config_clips(render_config, input_path)
 
     if not saved_clips:
         raise FileNotFoundError("No videos found in input folder.")
@@ -876,8 +1271,7 @@ def compile_videos(
             video_file = input_path / clip_info["fileName"]
 
             print(
-                f"Processing {play_index + 1}/"
-                f"{len(playback_clips)}: "
+                f"Processing {play_index + 1}/{len(playback_clips)}: "
                 f"{video_file.name}"
             )
 
@@ -896,15 +1290,15 @@ def compile_videos(
                 for played_clip in playback_clips[: play_index + 1]
             }
 
-            decorated_clip = add_ranking_overlay(
-                clip=vertical_clip,
-                title_document=title_document,
-                ranked_clips=ranked_clips,
-                revealed_clip_ids=revealed_clip_ids,
-                active_clip_id=clip_info["id"],
+            decorated_clips.append(
+                add_ranking_overlay(
+                    clip=vertical_clip,
+                    title_document=title_document,
+                    ranked_clips=ranked_clips,
+                    revealed_clip_ids=revealed_clip_ids,
+                    active_clip_id=clip_info["id"],
+                )
             )
-
-            decorated_clips.append(decorated_clip)
 
         final_video = concatenate_videoclips(
             decorated_clips,
