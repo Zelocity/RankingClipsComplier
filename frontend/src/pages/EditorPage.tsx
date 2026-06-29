@@ -57,13 +57,15 @@ function syncRevealRankOrder(previousOrder: number[], rankCount: number) {
     }
   }
 
+  const newRanks: number[] = [];
+
   for (let rankNumber = rankCount; rankNumber >= 1; rankNumber -= 1) {
     if (!usedRanks.has(rankNumber)) {
-      nextOrder.push(rankNumber);
+      newRanks.push(rankNumber);
     }
   }
 
-  return nextOrder;
+  return [...newRanks, ...nextOrder];
 }
 
 function EditorPage() {

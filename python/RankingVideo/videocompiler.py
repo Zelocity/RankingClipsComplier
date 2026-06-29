@@ -1350,6 +1350,8 @@ def compile_videos(
     input_path = Path(input_dir)
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
+    temp_path = output_path / "temp"
+    temp_path.mkdir(parents=True, exist_ok=True)
 
     render_config = read_render_config(config_path)
 
@@ -1467,11 +1469,15 @@ def compile_videos(
 
         final_output = output_path / "compiled_video.mp4"
 
+        temp_audio_path = temp_path / "compiled_video_audio.m4a"
+
         final_video.write_videofile(
             str(final_output),
             fps=30,
             codec="libx264",
             audio_codec="aac",
+            temp_audiofile=str(temp_audio_path),
+            remove_temp=True,
         )
 
         print(f"Done. Final video saved to: {final_output}")
