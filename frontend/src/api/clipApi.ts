@@ -148,10 +148,7 @@ export async function compileJob(
   return data;
 }
 
-export async function deleteClip(
-  jobId: string,
-  clipId: string,
-): Promise<void> {
+export async function deleteClip(jobId: string, clipId: string): Promise<void> {
   const response = await fetch(`${API_URL}/jobs/${jobId}/clips/${clipId}`, {
     method: "DELETE",
   });
@@ -160,5 +157,17 @@ export async function deleteClip(
 
   if (!response.ok) {
     throw new Error(data.message || "Could not delete clip.");
+  }
+}
+
+export async function resetProject(jobId: string): Promise<void> {
+  const response = await fetch(`${API_URL}/jobs/${jobId}/reset`, {
+    method: "DELETE",
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.message || "Could not reset project.");
   }
 }

@@ -14,19 +14,7 @@ export function createDefaultTitleDocument(): TitleDocument {
         content: [
           {
             type: "text",
-            text: "RANKING ",
-            marks: [
-              {
-                type: "textStyle",
-                attrs: {
-                  color: "#a78bfa",
-                },
-              },
-            ],
-          },
-          {
-            type: "text",
-            text: "THE BEST MOMENTS",
+            text: "RANKING THE BEST MOMENTS",
             marks: [
               {
                 type: "textStyle",

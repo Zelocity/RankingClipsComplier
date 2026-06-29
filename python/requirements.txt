@@ -1,3 +1,11 @@
-yt-dlp
 moviepy
+yt-dlp
 Pillow
+numpy
+
+## Prerequisites
+
+# Install FFmpeg on Windows:
+
+# ```powershell
+# winget install -e --id Gyan.FFmpeg

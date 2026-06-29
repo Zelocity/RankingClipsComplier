@@ -4,6 +4,7 @@ import {
   deleteClip,
   getClipsForJob,
   importClipFromUrl,
+  resetProject,
   updateClipTitle,
   updateClipTrim,
   type Clip,
@@ -47,9 +48,7 @@ export function useItemList(currentJobId: string | undefined) {
         }
 
         setItems(
-          clips.map((clip, index) =>
-            createItemFromClip(clip, index + 1),
-          ),
+          clips.map((clip, index) => createItemFromClip(clip, index + 1)),
         );
       } catch (error) {
         console.error("Could not load saved clips:", error);
@@ -63,10 +62,17 @@ export function useItemList(currentJobId: string | undefined) {
     };
   }, [currentJobId]);
 
-  async function handleUpdateItemTitle(
-    slotId: string,
-    newTitle: string,
-  ) {
+  async function handleResetItems() {
+    if (!currentJobId) {
+      return;
+    }
+
+    await resetProject(currentJobId);
+
+    setItems([]);
+  }
+
+  async function handleUpdateItemTitle(slotId: string, newTitle: string) {
     const trimmedTitle = newTitle.trim();
 
     if (!trimmedTitle || !currentJobId) {
@@ -129,12 +135,11 @@ export function useItemList(currentJobId: string | undefined) {
         return;
       }
 
-      const newItem = createItemFromClip(
-        result,
-        itemList.length + 1,
-      );
+      setItems((previousItems) => {
+        const newItem = createItemFromClip(result, previousItems.length + 1);
 
-      setItems((previousItems) => [...previousItems, newItem]);
+        return [...previousItems, newItem];
+      });
     } catch (error) {
       console.error("Could not import clip:", error);
     }
@@ -168,5 +173,6 @@ export function useItemList(currentJobId: string | undefined) {
     handleDeleteItem,
     handleUpdateItemTitle,
     handleUpdateItemTrim,
+    handleResetItems,
   };
 }

@@ -75,6 +75,7 @@ function EditorPage() {
     handleDeleteItem,
     handleUpdateItemTitle,
     handleUpdateItemTrim,
+    handleResetItems,
   } = useItemList(jobId);
 
   const [compiledVideoUrl, setCompiledVideoUrl] = useState<string | null>(null);
@@ -139,6 +140,37 @@ function EditorPage() {
     });
   }
 
+  function handleBackToReactPreview() {
+    setCompiledVideoUrl(null);
+    setDownloadUrl(null);
+    setCompileError("");
+  }
+
+  async function handleResetProject() {
+    const shouldReset = window.confirm(
+      "Reset this project? This will permanently remove every imported clip and compiled video.",
+    );
+
+    if (!shouldReset) {
+      return;
+    }
+
+    try {
+      await handleResetItems();
+
+      setPreviewItems([]);
+      setRevealRankOrder([]);
+      setTitleDocument(createDefaultTitleDocument());
+
+      handleBackToReactPreview();
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Could not reset project.";
+
+      setCompileError(message);
+    }
+  }
+
   async function handleCompile() {
     if (!jobId || rankedItems.length === 0 || isCompiling) {
       return;
@@ -181,6 +213,15 @@ function EditorPage() {
 
         <h2 className="mb-5 text-xl font-bold">Video Clips</h2>
 
+        <button
+          type="button"
+          onClick={() => void handleResetProject()}
+          disabled={itemList.length === 0}
+          className="mt-3 rounded-lg border border-red-500/60 bg-red-500/10 px-4 py-2 text-sm font-semibold text-red-300 transition hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          Reset Project
+        </button>
+
         <SubmitUrlForm jobId={jobId} onAddItem={handleAddItem} />
 
         <DraggableItemList
@@ -203,12 +244,22 @@ function EditorPage() {
 
         <div className="flex min-h-[600px] w-full max-w-3xl items-center justify-center rounded-2xl border-2 border-dashed border-slate-600 bg-slate-900">
           {compiledVideoUrl ? (
-            <video
-              key={compiledVideoUrl}
-              src={compiledVideoUrl}
-              controls
-              className="aspect-[9/16] w-full max-w-[360px] rounded-xl bg-black object-contain"
-            />
+            <div className="flex flex-col items-center gap-4">
+              <video
+                key={compiledVideoUrl}
+                src={compiledVideoUrl}
+                controls
+                className="aspect-[9/16] w-full max-w-[360px] rounded-xl bg-black object-contain"
+              />
+
+              <button
+                type="button"
+                onClick={handleBackToReactPreview}
+                className="rounded-lg bg-slate-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-600"
+              >
+                Back to React Preview
+              </button>
+            </div>
           ) : (
             <div className="flex min-h-[600px] w-full max-w-3xl items-center justify-center rounded-2xl border-2 border-dashed border-slate-600 bg-slate-900 p-6">
               <LivePreview

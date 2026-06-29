@@ -15,10 +15,10 @@ type Alignment = "left" | "center" | "right";
 
 const colorOptions = [
   "#ffffff",
-  "#a78bfa",
+  "#ff0000",
+  "#ffff00",
   "#60a5fa",
   "#4ade80",
-  "#facc15",
   "#fb7185",
   "#fb923c",
 ];

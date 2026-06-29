@@ -23,17 +23,12 @@ function isValidFileName(fileName: string): boolean {
 }
 
 function getTrimStart(value: unknown): number {
-  return typeof value === "number" &&
-    Number.isFinite(value) &&
-    value >= 0
+  return typeof value === "number" && Number.isFinite(value) && value >= 0
     ? value
     : 0;
 }
 
-function getTrimEnd(
-  value: unknown,
-  trimStart: number,
-): number | null {
+function getTrimEnd(value: unknown, trimStart: number): number | null {
   return typeof value === "number" &&
     Number.isFinite(value) &&
     value > trimStart
@@ -69,15 +64,8 @@ function readClipMetadata(metadataPath: string): ClipMetadata[] {
   }
 }
 
-function writeClipMetadata(
-  metadataPath: string,
-  clips: ClipMetadata[],
-) {
-  fs.writeFileSync(
-    metadataPath,
-    JSON.stringify(clips, null, 2),
-    "utf8",
-  );
+function writeClipMetadata(metadataPath: string, clips: ClipMetadata[]) {
+  fs.writeFileSync(metadataPath, JSON.stringify(clips, null, 2), "utf8");
 }
 
 function getSavedClips(
@@ -105,9 +93,7 @@ function getSavedClips(
       };
     });
 
-  const savedFileNames = new Set(
-    savedClips.map((clip) => clip.fileName),
-  );
+  const savedFileNames = new Set(savedClips.map((clip) => clip.fileName));
 
   const missingClips = videoFiles
     .filter((fileName) => !savedFileNames.has(fileName))
@@ -134,10 +120,7 @@ function buildClipResponse(jobId: string, clip: ClipMetadata) {
 }
 
 function removeStaleExport(outputPath: string) {
-  fs.rmSync(
-    path.join(outputPath, "compiled_video.mp4"),
-    { force: true },
-  );
+  fs.rmSync(path.join(outputPath, "compiled_video.mp4"), { force: true });
 }
 
 router.post("/:jobId/import-url", (req, res) => {
@@ -179,11 +162,19 @@ router.post("/:jobId/import-url", (req, res) => {
     "-m",
     "yt_dlp",
     url,
-    "-P",
-    inputPath,
+
+    "--no-playlist",
+
+    // Download video + audio, then merge them.
+    "-f",
+    "bv*+ba/b",
+
+    // Keeps the final result browser-friendly.
     "-t",
     "mp4",
-    "--no-playlist",
+
+    "-P",
+    inputPath,
     "-o",
     outputTemplate,
   ]);
@@ -283,11 +274,7 @@ router.patch("/:jobId/clips/:clipId/title", (req, res) => {
     });
   }
 
-  const {
-    inputPath,
-    outputPath,
-    metadataPath,
-  } = getJobPaths(jobId);
+  const { inputPath, outputPath, metadataPath } = getJobPaths(jobId);
 
   if (!fs.existsSync(inputPath)) {
     return res.status(404).json({
@@ -348,11 +335,7 @@ router.patch("/:jobId/clips/:clipId/trim", (req, res) => {
     });
   }
 
-  const {
-    inputPath,
-    outputPath,
-    metadataPath,
-  } = getJobPaths(jobId);
+  const { inputPath, outputPath, metadataPath } = getJobPaths(jobId);
 
   if (!fs.existsSync(inputPath)) {
     return res.status(404).json({
@@ -394,11 +377,7 @@ router.delete("/:jobId/clips/:clipId", (req, res) => {
     });
   }
 
-  const {
-    inputPath,
-    outputPath,
-    metadataPath,
-  } = getJobPaths(jobId);
+  const { inputPath, outputPath, metadataPath } = getJobPaths(jobId);
 
   if (!fs.existsSync(inputPath)) {
     return res.status(404).json({
@@ -419,10 +398,9 @@ router.delete("/:jobId/clips/:clipId", (req, res) => {
   const deletedClip = clips[clipIndex];
 
   try {
-    fs.rmSync(
-      path.join(inputPath, path.basename(deletedClip.fileName)),
-      { force: true },
-    );
+    fs.rmSync(path.join(inputPath, path.basename(deletedClip.fileName)), {
+      force: true,
+    });
 
     clips.splice(clipIndex, 1);
     writeClipMetadata(metadataPath, clips);
@@ -434,9 +412,7 @@ router.delete("/:jobId/clips/:clipId", (req, res) => {
     });
   } catch (error) {
     const message =
-      error instanceof Error
-        ? error.message
-        : "Could not delete clip.";
+      error instanceof Error ? error.message : "Could not delete clip.";
 
     return res.status(500).json({
       message,
@@ -523,6 +499,51 @@ router.get("/:jobId/output/:fileName", (req, res) => {
   }
 
   return res.sendFile(filePath);
+});
+
+router.delete("/:jobId/reset", (req, res) => {
+  const { jobId } = req.params;
+
+  if (!isValidJobId(jobId)) {
+    return res.status(400).json({
+      message: "Invalid job ID.",
+    });
+  }
+
+  const { jobPath, inputPath, metadataPath } = getJobPaths(jobId);
+  const outputPath = path.join(jobPath, "output");
+
+  try {
+    fs.rmSync(inputPath, {
+      recursive: true,
+      force: true,
+    });
+
+    fs.rmSync(outputPath, {
+      recursive: true,
+      force: true,
+    });
+
+    fs.mkdirSync(inputPath, {
+      recursive: true,
+    });
+
+    fs.mkdirSync(outputPath, {
+      recursive: true,
+    });
+
+    writeClipMetadata(metadataPath, []);
+
+    return res.status(200).json({
+      message: "Project reset successfully.",
+    });
+  } catch (error) {
+    console.error("Could not reset project:", error);
+
+    return res.status(500).json({
+      message: "Could not reset project.",
+    });
+  }
 });
 
 export default router;

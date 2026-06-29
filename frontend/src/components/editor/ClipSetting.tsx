@@ -1,6 +1,29 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import type { Item } from "../../utils/listUtils";
+
+const emojiOptions = [
+  "😂",
+  "🤣",
+  "😭",
+  "💀",
+  "😳",
+  "😮",
+  "🤯",
+  "😅",
+  "😤",
+  "😎",
+  "🔥",
+  "✨",
+  "👀",
+  "🤨",
+  "🙃",
+  "🐶",
+  "🐱",
+  "🐭",
+  "🦊",
+  "❤️",
+];
 
 type ClipSettingProps = {
   item: Item;
@@ -12,9 +35,36 @@ function ClipSetting({ item, onUpdateItemTitle }: ClipSettingProps) {
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
 
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
   useEffect(() => {
     setDraftTitle(item.title);
   }, [item.slotId, item.title]);
+
+  function insertEmoji(emoji: string) {
+    const input = inputRef.current;
+
+    const selectionStart = input?.selectionStart ?? draftTitle.length;
+    const selectionEnd = input?.selectionEnd ?? draftTitle.length;
+
+    const nextTitle =
+      draftTitle.slice(0, selectionStart) +
+      emoji +
+      draftTitle.slice(selectionEnd);
+
+    if (nextTitle.length > 100) {
+      return;
+    }
+
+    setDraftTitle(nextTitle);
+
+    requestAnimationFrame(() => {
+      const nextCursorPosition = selectionStart + emoji.length;
+
+      input?.focus();
+      input?.setSelectionRange(nextCursorPosition, nextCursorPosition);
+    });
+  }
 
   async function handleApplyTitle() {
     const cleanedTitle = draftTitle.trim();
@@ -47,12 +97,11 @@ function ClipSetting({ item, onUpdateItemTitle }: ClipSettingProps) {
       <div className="mb-2 flex items-center justify-between gap-3">
         <h4 className="text-sm font-semibold text-slate-100">Clip Title</h4>
 
-        <span className="text-xs text-slate-400">
-          {draftTitle.trim().length}/100
-        </span>
+        <span className="text-xs text-slate-400">{draftTitle.length}/100</span>
       </div>
 
       <input
+        ref={inputRef}
         type="text"
         value={draftTitle}
         maxLength={100}
@@ -68,7 +117,30 @@ function ClipSetting({ item, onUpdateItemTitle }: ClipSettingProps) {
         placeholder="Enter clip title"
       />
 
-      <div className="mt-2 flex items-center justify-between gap-2">
+      <div className="mt-3">
+        <p className="mb-2 text-xs font-medium text-slate-400">Add emoji</p>
+
+        <div className="flex flex-wrap gap-1.5">
+          {emojiOptions.map((emoji) => (
+            <button
+              key={emoji}
+              type="button"
+              data-swapy-no-drag
+              onPointerDown={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+              }}
+              onClick={() => insertEmoji(emoji)}
+              className="flex h-8 w-8 items-center justify-center rounded-md bg-slate-800 text-lg transition hover:bg-violet-600 hover:scale-110"
+              aria-label={`Add ${emoji} to title`}
+            >
+              {emoji}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="mt-3 flex items-center justify-between gap-2">
         <p className="text-xs text-slate-400">
           This title appears in the ranking list.
         </p>
