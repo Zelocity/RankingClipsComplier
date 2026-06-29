@@ -162,11 +162,19 @@ router.post("/:jobId/import-url", (req, res) => {
     "-m",
     "yt_dlp",
     url,
-    "-P",
-    inputPath,
+
+    "--no-playlist",
+
+    // Download video + audio, then merge them.
+    "-f",
+    "bv*+ba/b",
+
+    // Keeps the final result browser-friendly.
     "-t",
     "mp4",
-    "--no-playlist",
+
+    "-P",
+    inputPath,
     "-o",
     outputTemplate,
   ]);
