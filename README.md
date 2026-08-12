@@ -1,4 +1,4 @@
-# Ranking Video Compiler
+# Ranking Clips Compiler
 
 A web application for importing, organizing, ranking, and compiling short-form video clips into a single ranking-style video.
 
