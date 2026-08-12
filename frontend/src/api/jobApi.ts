@@ -1,11 +1,11 @@
 const API_URL = import.meta.env.VITE_API_URL;
 
-export type jobResponse = {
+export type CreatedJob = {
   message: string;
   jobId: string;
 };
 
-export async function createJob(): Promise<jobResponse> {
+export async function createJob(): Promise<CreatedJob> {
   const response = await fetch(`${API_URL}/jobs`, {
     method: "POST",
   });
@@ -19,7 +19,7 @@ export async function createJob(): Promise<jobResponse> {
   return data;
 }
 
-export async function deleteJob(jobId: string): Promise<jobResponse> {
+export async function deleteJob(jobId: string): Promise<void> {
   const response = await fetch(`${API_URL}/jobs/${jobId}`, {
     method: "DELETE",
   });
@@ -29,6 +29,4 @@ export async function deleteJob(jobId: string): Promise<jobResponse> {
   if (!response.ok) {
     throw new Error(data.message || "Failed to delete job.");
   }
-  data.message = `Successfully deleted job: ${jobId}`;
-  return data;
 }
