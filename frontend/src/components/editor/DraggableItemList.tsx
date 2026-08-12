@@ -85,16 +85,6 @@ function DraggableItemList({
     });
   }
 
-  function collapseAllCards() {
-    setExpandedItems((previousItems) => {
-      if (previousItems.size === 0) {
-        return previousItems;
-      }
-
-      return new Set();
-    });
-  }
-
   useEffect(() => {
     if (containerRef.current === null) {
       return;

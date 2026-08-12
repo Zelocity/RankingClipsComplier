@@ -41,6 +41,9 @@ export function useItemList(currentJobId: string | undefined) {
 
     async function loadSavedClips() {
       try {
+        if (!currentJobId) {
+          return;
+        }
         const clips = await getClipsForJob(currentJobId);
 
         if (cancelled) {
