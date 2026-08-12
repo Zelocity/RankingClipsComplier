@@ -119,7 +119,11 @@ function LivePreview({ items, playOrder, titleDocument }: LivePreviewProps) {
     }
 
     function prepareActiveClip() {
-      video.currentTime = getTrimStart(activeItem, video);
+      const video = videoRef.current;
+
+      if (!video || !activeItem) {
+        return;
+      }
 
       if (!shouldAutoPlayNextRef.current) {
         return;
@@ -128,7 +132,7 @@ function LivePreview({ items, playOrder, titleDocument }: LivePreviewProps) {
       shouldAutoPlayNextRef.current = false;
 
       void video.play().catch(() => {
-        setIsPlaying(false);
+        console.warn("Could not play preview video.");
       });
     }
 
