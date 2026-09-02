@@ -28,7 +28,10 @@ describe("createJob() and deleteJob()", () => {
       }),
     }) as unknown as typeof fetch;
 
-    await expect(deleteJob("abc123")).resolves.toBeUndefined();
+    const result = await deleteJob("abc123");
+
+    expect(result.message).toBe("Successfully deleted job: abc123");
+    expect(result.jobId).toBe("abc123");
 
     expect(globalThis.fetch).toHaveBeenCalledWith(
       expect.stringContaining("abc123"),

@@ -1,8 +1,7 @@
 import express from "express";
+import path from "path";
 import fs from "fs";
 import { randomUUID } from "crypto";
-
-import { getJobPaths } from "../config/paths";
 
 const router = express.Router();
 
@@ -11,8 +10,12 @@ function isValidJobId(jobId: string): boolean {
 }
 
 router.post("/", (req, res) => {
+  const projectRoot = path.resolve(process.cwd(), "..");
   const jobId = randomUUID();
-  const { inputPath, outputPath } = getJobPaths(jobId);
+
+  const jobPath = path.join(projectRoot, "storage", "jobs", jobId);
+  const inputPath = path.join(jobPath, "input");
+  const outputPath = path.join(jobPath, "output");
 
   try {
     fs.mkdirSync(inputPath, { recursive: true });
@@ -34,13 +37,18 @@ router.delete("/:jobId", (req, res) => {
   const { jobId } = req.params;
 
   if (!isValidJobId(jobId)) {
-    return res.status(400).json({ message: "Invalid job ID." });
+    return res.status(400).json({
+      message: "Invalid job ID.",
+    });
   }
 
-  const { jobPath } = getJobPaths(jobId);
+  const projectRoot = path.resolve(process.cwd(), "..");
+  const jobPath = path.join(projectRoot, "storage", "jobs", jobId);
 
   if (!fs.existsSync(jobPath)) {
-    return res.status(404).json({ message: "Job does not exist." });
+    return res.status(404).json({
+      message: "Job does not exist.",
+    });
   }
 
   try {

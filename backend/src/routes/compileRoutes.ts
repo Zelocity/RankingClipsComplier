@@ -3,13 +3,6 @@ import path from "path";
 import fs from "fs";
 import { spawn } from "child_process";
 
-import {
-  getBackendBaseUrl,
-  getJobPaths,
-  projectRoot,
-  pythonPath,
-} from "../config/paths";
-
 const router = express.Router();
 
 type SavedClip = {
@@ -160,14 +153,6 @@ function addMissingIds(orderedIds: string[], fallbackIds: string[]): string[] {
   return allIds;
 }
 
-function shouldCheckPythonPath(): boolean {
-  // Local Windows uses an actual file path:
-  // project/python/.venv/Scripts/python.exe
-  //
-  // Render/Docker uses "python3", which is found from the system PATH.
-  return path.isAbsolute(pythonPath) || pythonPath.includes("\\");
-}
-
 router.post("/:jobId", (req, res) => {
   const { jobId } = req.params;
 
@@ -177,10 +162,22 @@ router.post("/:jobId", (req, res) => {
     });
   }
 
-  const { jobPath, inputPath, outputPath } = getJobPaths(jobId);
+  const projectRoot = path.resolve(process.cwd(), "..");
 
+  const jobPath = path.join(projectRoot, "storage", "jobs", jobId);
+
+  const inputPath = path.join(jobPath, "input");
+  const outputPath = path.join(jobPath, "output");
   const metadataPath = path.join(jobPath, "clips.json");
   const renderConfigPath = path.join(jobPath, "render-config.json");
+
+  const pythonPath = path.join(
+    projectRoot,
+    "python",
+    ".venv",
+    "Scripts",
+    "python.exe",
+  );
 
   const compilerPath = path.join(
     projectRoot,
@@ -195,17 +192,15 @@ router.post("/:jobId", (req, res) => {
     });
   }
 
-  if (shouldCheckPythonPath() && !fs.existsSync(pythonPath)) {
+  if (!fs.existsSync(pythonPath)) {
     return res.status(500).json({
       message: "Python virtual environment was not found.",
-      pythonPath,
     });
   }
 
   if (!fs.existsSync(compilerPath)) {
     return res.status(500).json({
       message: "Python compiler file was not found.",
-      compilerPath,
     });
   }
 
@@ -252,7 +247,7 @@ router.post("/:jobId", (req, res) => {
   const compiledFileName = "compiled_video.mp4";
   const compiledFilePath = path.join(outputPath, compiledFileName);
 
-  // Remove old export before compiling again.
+  // Removes an old export before compiling again.
   fs.rmSync(compiledFilePath, { force: true });
 
   const pythonProcess = spawn(
@@ -282,6 +277,7 @@ router.post("/:jobId", (req, res) => {
     }
 
     hasResponded = true;
+
     return res.status(statusCode).json(body);
   }
 
@@ -325,12 +321,10 @@ router.post("/:jobId", (req, res) => {
       });
     }
 
-    const baseUrl = getBackendBaseUrl(req);
-
     return sendResponse(200, {
       message: "Videos compiled successfully.",
-      videoUrl: `${baseUrl}/jobs/${jobId}/output/${compiledFileName}`,
-      downloadUrl: `${baseUrl}/jobs/${jobId}/output/${compiledFileName}/download`,
+      videoUrl: `http://localhost:8000/jobs/${jobId}/output/${compiledFileName}`,
+      downloadUrl: `http://localhost:8000/jobs/${jobId}/output/${compiledFileName}/download`,
     });
   });
 });

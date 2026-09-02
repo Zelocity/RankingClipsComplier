@@ -1,20 +1,13 @@
-const API_URL = import.meta.env.VITE_API_URL?.replace(/\/$/, "");
+const API_URL = "http://localhost:8000";
 
-if (!API_URL) {
-  throw new Error("VITE_API_URL is missing.");
-}
-
-export type CreatedJob = {
+export type jobResponse = {
   message: string;
   jobId: string;
 };
 
-export async function createJob(): Promise<CreatedJob> {
+export async function createJob(): Promise<jobResponse> {
   const response = await fetch(`${API_URL}/jobs`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
   });
 
   const data = await response.json();
@@ -26,7 +19,7 @@ export async function createJob(): Promise<CreatedJob> {
   return data;
 }
 
-export async function deleteJob(jobId: string): Promise<void> {
+export async function deleteJob(jobId: string): Promise<jobResponse> {
   const response = await fetch(`${API_URL}/jobs/${jobId}`, {
     method: "DELETE",
   });
@@ -36,4 +29,6 @@ export async function deleteJob(jobId: string): Promise<void> {
   if (!response.ok) {
     throw new Error(data.message || "Failed to delete job.");
   }
+  data.message = `Successfully deleted job: ${jobId}`;
+  return data;
 }

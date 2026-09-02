@@ -103,12 +103,6 @@ function ClipTrimControls({
     function stopAtTrimEnd() {
       const { start, end } = trimValuesRef.current;
 
-      const videoElement = videoRef.current;
-
-      if (!videoElement) {
-        return;
-      }
-
       if (videoElement.currentTime >= end) {
         videoElement.pause();
         videoElement.currentTime = start;
